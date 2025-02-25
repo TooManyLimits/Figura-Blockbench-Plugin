@@ -5,9 +5,6 @@
 interface Group {
 	vanilla_root?: string,
 	replace_vanilla_root?: boolean,
-
-	scale: ArrayVector3,
-
 }
 interface GroupOptions {
 	vanilla_root?: string,
@@ -23,9 +20,7 @@ interface TextureData {
 	vanilla_texture_override?: string,
 }
 
-
-// These aren't in the types for some reason? 
-// Add them manually before waiting for blockbench-types repo to update
+// These aren't in the types, so add them ourselves.
 interface Mesh {
 	origin: ArrayVector3,
 	rotation: ArrayVector3,
@@ -39,12 +34,9 @@ interface Cube {
 interface ModelProject {
 	display_settings: {[key: string]: DisplaySlot}
 }
+interface OutlinerNode {
+	needsUniqueName: ConditionResolvable
+}
 
-// namespace THREE {
-// 	interface Object3D {
-// 		fix_rotation?: THREE.Euler,
-// 		fix_position?: THREE.Vector3,
-// 		fix_scale?: THREE.Vector3,
-// 	}
-// }
-
+declare var flipNameOnAxis: (node: OutlinerNode, axis: number, check?: (node: OutlinerNode) => boolean, original_name?: string) => void;
+declare var mirrorSelected: (axis: number) => void;

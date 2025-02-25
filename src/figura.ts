@@ -33,16 +33,6 @@ BBPlugin.register(PLUGIN_ID, {
 			'action.export_figura': 'Export Figura Model'
 		});
 
-		// Hopefully this block will not be necessary in the future, because it just fixes Blockbench bugs.
-		{
-			// Make "texture" field used/saved
-			deleteLater(new Property(Group, 'string', 'texture', { condition: () => Format.per_group_texture }));
-			// Make it so moving a part will update texture faces
-			let callback = () => Canvas.updateAllFaces();
-			Blockbench.addListener<EventName>('finish_edit', callback);
-			defer(() => Blockbench.removeListener('finish_edit', callback));
-		}
-
 		setup_vanilla_roots();
 		setup_vanilla_texture_override();
 		create_format();
