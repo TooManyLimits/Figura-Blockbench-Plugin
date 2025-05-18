@@ -7,7 +7,7 @@
 // Don't change these types carelessly - Figura's java code will depend on them!
 
 export type FiguraData = {
-	part_data: FiguraGroup,
+	roots: FiguraGroup[],
 	textures: FiguraTexture[],
 	item_display_data?: FiguraItemDisplayData, // Only used in item models
 }
@@ -17,7 +17,7 @@ export type FiguraGroup = {
 	origin: FiguraVec3,
 	rotation: FiguraVec3, // Degrees, XYZ
 	children: FiguraGroup[],
-
+	mimic_part?: string, // Vanilla model part to mimic transforms of
 	// All cubes/meshes in this group must use a singular texture.
 	// This is that texture's index. The blockbench "per_group_texture" Format boolean
 	// should help us with this, mostly.
@@ -25,10 +25,6 @@ export type FiguraGroup = {
 	texture_index?: number,
 	cubes: FiguraCube[],
 	meshes: FiguraMesh[],
-
-	// Only used on top-level groups in vanilla root models
-	vanilla_root?: string,
-	replace_vanilla_root?: boolean
 }
 
 export type FiguraCube = {

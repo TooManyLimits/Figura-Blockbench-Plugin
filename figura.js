@@ -15,10 +15,6 @@ __webpack_require__.r(__webpack_exports__);
 // Compile the global data in the project into a FiguraData.
 // Can throw a string error for display.
 function compile_figura_data() {
-    // Generate groups!
-    let parts = Project.outliner
-        .filter(part => part instanceof Group)
-        .map(group => compile_group(group, [0, 0, 0]));
     // Cubes or meshes are not currently allowed at the top level, because they're not in a group, so cannot have a texture index.
     for (var node of Project.outliner) {
         if (node instanceof Cube || node instanceof Mesh) {
@@ -26,6 +22,10 @@ function compile_figura_data() {
             throw 'Top-level cubes and meshes, like "' + node.name + '", are not supported yet! For now, they must be wrapped in a group.';
         }
     }
+    // Generate groups!
+    let roots = Project.outliner
+        .filter(part => part instanceof Group)
+        .map(group => compile_group(group, [0, 0, 0]));
     // Fetch item display data
     let display_contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
     let item_display_data = {};
@@ -41,9 +41,7 @@ function compile_figura_data() {
     }
     // Return.
     return {
-        part_data: {
-            name: "", origin: [0, 0, 0], rotation: [0, 0, 0], children: parts, cubes: [], meshes: []
-        },
+        roots,
         textures: Texture.all.map(tex => ({
             name: tex.name,
             path: tex.path,
@@ -84,11 +82,10 @@ function compile_group(group, absolute_parent_origin) {
         origin: absolute_origin.slice().V3_subtract(absolute_parent_origin),
         rotation: group.rotation,
         children: children_groups,
+        mimic_part: group.mimic_part || undefined,
         texture_index: texture_index,
         cubes: cubes,
         meshes: meshes,
-        vanilla_root: group.vanilla_root || undefined,
-        replace_vanilla_root: group.replace_vanilla_root || undefined
     };
 }
 function compile_cube(cube, absolute_parent_origin) {
@@ -151,82 +148,58 @@ function compile_mesh(mesh, absolute_parent_origin) {
 
 /***/ }),
 
-/***/ "./src/features/vanilla_roots.ts":
-/*!***************************************!*\
-  !*** ./src/features/vanilla_roots.ts ***!
-  \***************************************/
+/***/ "./src/features/mimic_parts.ts":
+/*!*************************************!*\
+  !*** ./src/features/mimic_parts.ts ***!
+  \*************************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   setup_vanilla_roots: () => (/* binding */ setup_vanilla_roots)
+/* harmony export */   setup_mimic_parts: () => (/* binding */ setup_mimic_parts)
 /* harmony export */ });
 /* harmony import */ var _figura__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../figura */ "./src/figura.ts");
 
-// Set up vanilla root functionality.
-function setup_vanilla_roots() {
-    var _a, _b, _c;
-    // 2 properties on groups, for what the vanilla root is, and whether to replace.
-    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Property(Group, 'string', 'vanilla_root', { condition: { formats: [_figura__WEBPACK_IMPORTED_MODULE_0__.PLUGIN_ID] } }));
-    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Property(Group, 'boolean', 'replace_vanilla_root', { condition: { formats: [_figura__WEBPACK_IMPORTED_MODULE_0__.PLUGIN_ID] } }));
-    // Display action for current root, and click to change.
-    let displayCurrent = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_current_vanilla_root', {
-        name: 'No vanilla root selected',
+// Set up mimic part functionality.
+function setup_mimic_parts() {
+    var _a, _b;
+    // New property on groups to store the current mimic part
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Property(Group, 'string', 'mimic_part', { condition: { formats: [_figura__WEBPACK_IMPORTED_MODULE_0__.PLUGIN_ID] } }));
+    // Display action for current mimic, and click to change.
+    let displayCurrent = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_current_mimic_part', {
+        name: 'No mimic part selected',
         click() {
             oneGroup(group => {
-                Blockbench.textPrompt('Type a vanilla root manually:', group.vanilla_root || '', given => {
-                    group.vanilla_root = given || undefined;
+                Blockbench.textPrompt('Type a part to mimic manually. Example: ENTITY/head', group.mimic_part || '', given => {
+                    group.mimic_part = given || undefined;
                 });
             });
         }
     }));
     // Actions for setting these values.
-    let chooseRoot = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_choose_vanilla_root', {
-        name: 'Figura: Vanilla Root',
-        description: 'Choose which vanilla root this part will follow. Works in vanilla/ folder only.',
+    let chooseMimicPart = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_choose_mimic_part', {
+        name: 'Figura: Mimic Part',
+        description: 'Choose which vanilla part this part will mimic.',
         icon: 'accessibility_new',
         category: 'edit',
         condition: {
             formats: [_figura__WEBPACK_IMPORTED_MODULE_0__.PLUGIN_ID],
             method() {
                 return !!oneGroup(group => {
-                    let success = group.parent === 'root';
                     // Cursed condition with side effects... needed to change the name.
-                    if (success)
-                        displayCurrent.setName(group.vanilla_root ?
-                            'Current: \"' + group.vanilla_root + '\"' :
-                            'No vanilla root selected');
-                    return success;
+                    displayCurrent.setName(group.mimic_part ?
+                        'Current: \"' + group.mimic_part + '\"' :
+                        'No mimic part selected');
+                    return true;
                 });
             }
         },
-        children: [displayCurrent, ...expand_parts_tree(SUPPORTED_PARTS)],
+        children: [displayCurrent, ...expand_entities(SUPPORTED_MIMICS)],
         click() { }
-    }));
-    let replaceRoot = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_replace_vanilla_root', {
-        name: 'Figura: Replace Vanilla Root',
-        description: 'Enable this to replace the vanilla part instead of rendering with it.',
-        icon: 'check_box_outline_blank',
-        condition: {
-            formats: [_figura__WEBPACK_IMPORTED_MODULE_0__.PLUGIN_ID],
-            method() {
-                return !!oneGroup(group => {
-                    let success = group.parent === 'root' && group.vanilla_root;
-                    // Cursed condition with side effects... needed to change the icon.
-                    if (success)
-                        replaceRoot.setIcon(group.replace_vanilla_root ? 'check_box' : 'check_box_outline_blank');
-                    return success;
-                });
-            }
-        },
-        click() {
-            oneGroup(group => group.replace_vanilla_root = !group.replace_vanilla_root);
-        }
     }));
     // Add actions to group menu.
     (_a = Group.prototype.menu) === null || _a === void 0 ? void 0 : _a.structure.push(new MenuSeparator()); // Separator before figura stuff
-    (_b = Group.prototype.menu) === null || _b === void 0 ? void 0 : _b.addAction(chooseRoot);
-    (_c = Group.prototype.menu) === null || _c === void 0 ? void 0 : _c.addAction(replaceRoot);
+    (_b = Group.prototype.menu) === null || _b === void 0 ? void 0 : _b.addAction(chooseMimicPart);
 }
 // Helpers because multi_selected and first_selected and properties are annoying
 function oneGroup(func) {
@@ -237,141 +210,68 @@ function oneGroup(func) {
         return undefined;
     }
 }
-function expand_parts_tree(parts, path = '') {
+function expand_entities(entities) {
+    return entities.map(entity => (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura.mimic_part_selector.' + entity[0], {
+        name: entity[0],
+        children: expand_models('figura.mimic_part_selector.' + entity[0], entity[1]),
+        click() { }
+    })));
+}
+function expand_models(action_prefix, models) {
+    return models.map(model => (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + model[0], {
+        name: model[0],
+        children: expand_model_parts(action_prefix + '.' + model[0], model[1], model[0]),
+        click() { }
+    })));
+}
+function expand_model_parts(action_prefix, parts, model_name) {
     return parts.map(part => {
-        if (part === null) {
-            return new MenuSeparator();
-        }
-        else if (typeof part === 'string') {
-            return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_vanilla_root_selector_' + part, {
+        if (typeof part === 'string') {
+            return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + part, {
                 name: part,
-                click() {
-                    oneGroup(group => group.vanilla_root = part);
-                }
+                click() { oneGroup(group => group.mimic_part = model_name + '/' + part); }
             }));
         }
         else {
-            let newPath = path + '_' + part.name.toLowerCase().replace(' ', '_');
-            return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura_vanilla_root_selector_' + newPath, {
-                name: part.name,
-                children: expand_parts_tree(part.children, newPath),
+            return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + part[0], {
+                name: part[0],
+                children: expand_model_parts(action_prefix + '.' + part[0], part[1], model_name),
                 click() { }
             }));
         }
     });
 }
-const SUPPORTED_PARTS = [
-    {
-        name: 'Player',
-        children: [
-            'FIGURA_HEAD',
-            'FIGURA_BODY',
-            'FIGURA_LEFT_ARM',
-            'FIGURA_RIGHT_ARM',
-            'FIGURA_LEFT_LEG',
-            'FIGURA_RIGHT_LEG',
-            'FIGURA_CAPE',
-            null,
-            {
-                name: 'Skin Outer Layer',
-                children: [
-                    'FIGURA_HAT',
-                    'FIGURA_JACKET',
-                    'FIGURA_LEFT_SLEEVE',
-                    'FIGURA_RIGHT_SLEEVE',
-                    'FIGURA_LEFT_PANTS',
-                    'FIGURA_RIGHT_PANTS',
-                ]
-            },
-            {
-                name: 'Armor',
-                children: [
-                    {
-                        name: 'Inner Layer',
-                        children: [
-                            'FIGURA_ARMOR_HEAD_INNER',
-                            'FIGURA_ARMOR_HAT_INNER',
-                            'FIGURA_ARMOR_BODY_INNER',
-                            'FIGURA_ARMOR_LEFT_ARM_INNER',
-                            'FIGURA_ARMOR_RIGHT_ARM_INNER',
-                            'FIGURA_ARMOR_LEFT_LEG_INNER',
-                            'FIGURA_ARMOR_RIGHT_LEG_INNER',
-                        ]
-                    },
-                    {
-                        name: 'Outer Layer',
-                        children: [
-                            'FIGURA_ARMOR_HEAD_OUTER',
-                            'FIGURA_ARMOR_HAT_OUTER',
-                            'FIGURA_ARMOR_BODY_OUTER',
-                            'FIGURA_ARMOR_LEFT_ARM_OUTER',
-                            'FIGURA_ARMOR_RIGHT_ARM_OUTER',
-                            'FIGURA_ARMOR_LEFT_LEG_OUTER',
-                            'FIGURA_ARMOR_RIGHT_LEG_OUTER',
-                        ]
-                    },
-                    {
-                        name: 'Baby',
-                        children: [
-                            {
-                                name: 'Inner Layer',
-                                children: [
-                                    'FIGURA_ARMOR_HEAD_INNER_BABY',
-                                    'FIGURA_ARMOR_HAT_INNER_BABY',
-                                    'FIGURA_ARMOR_BODY_INNER_BABY',
-                                    'FIGURA_ARMOR_LEFT_ARM_INNER_BABY',
-                                    'FIGURA_ARMOR_RIGHT_ARM_INNER_BABY',
-                                    'FIGURA_ARMOR_LEFT_LEG_INNER_BABY',
-                                    'FIGURA_ARMOR_RIGHT_LEG_INNER_BABY',
-                                ]
-                            },
-                            {
-                                name: 'Outer Layer',
-                                children: [
-                                    'FIGURA_ARMOR_HEAD_OUTER_BABY',
-                                    'FIGURA_ARMOR_HAT_OUTER_BABY',
-                                    'FIGURA_ARMOR_BODY_OUTER_BABY',
-                                    'FIGURA_ARMOR_LEFT_ARM_OUTER_BABY',
-                                    'FIGURA_ARMOR_RIGHT_ARM_OUTER_BABY',
-                                    'FIGURA_ARMOR_LEFT_LEG_OUTER_BABY',
-                                    'FIGURA_ARMOR_RIGHT_LEG_OUTER_BABY',
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                name: 'Elytra',
-                children: [
-                    'FIGURA_LEFT_ELYTRA',
-                    'FIGURA_RIGHT_ELYTRA'
-                ]
-            },
-            {
-                name: 'Trident Attack',
-                children: [
-                    'FIGURA_SPIN_ATTACK_1',
-                    'FIGURA_SPIN_ATTACK_2',
-                ]
-            },
-            {
-                name: 'Stuck Arrows',
-                children: [
-                    'FIGURA_STUCK_ARROW_1',
-                    'FIGURA_STUCK_ARROW_2',
-                    'FIGURA_STUCK_ARROW_BACK'
-                ]
-            },
-            {
-                name: 'Stuck Bee Stingers',
-                children: [
-                    'FIGURA_STUCK_BEE_STINGER_1',
-                    'FIGURA_STUCK_BEE_STINGER_2'
-                ]
-            }
-        ]
-    }
+const SUPPORTED_MIMICS = [
+    ['Player', [
+            ['ENTITY', [
+                    ['head', ['hat']],
+                    ['body', ['jacket']],
+                    ['left_arm', ['left_sleeve']],
+                    ['right_arm', ['right_sleeve']],
+                    ['left_leg', ['left_pants']],
+                    ['right_leg', ['right_pants']],
+                ]],
+            ['ELYTRA', [
+                    'left_wing',
+                    'right_wing'
+                ]],
+            ['CAPE_ROOT', [
+                    ['body', ['cape']]
+                ]]
+        ]],
+    ['Fox', [
+            ['ENTITY', [
+                    ['head', [
+                            'left_ear', 'right_ear',
+                            'nose'
+                        ]],
+                    ['body', ['tail']],
+                    'left_front_leg',
+                    'right_front_leg',
+                    'left_hind_leg',
+                    'right_hind_leg',
+                ]]
+        ]]
 ];
 
 
@@ -422,7 +322,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   deleteLater: () => (/* binding */ deleteLater)
 /* harmony export */ });
 /* harmony import */ var _format__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./format */ "./src/format.ts");
-/* harmony import */ var _features_vanilla_roots__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./features/vanilla_roots */ "./src/features/vanilla_roots.ts");
+/* harmony import */ var _features_mimic_parts__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./features/mimic_parts */ "./src/features/mimic_parts.ts");
 /* harmony import */ var _features_vanilla_texture_override__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./features/vanilla_texture_override */ "./src/features/vanilla_texture_override.ts");
 
 
@@ -454,16 +354,7 @@ BBPlugin.register(PLUGIN_ID, {
         Language.addTranslations('en', {
             'action.export_figura': 'Export Figura Model'
         });
-        // Hopefully this block will not be necessary in the future, because it just fixes Blockbench bugs.
-        {
-            // Make "texture" field used/saved
-            deleteLater(new Property(Group, 'string', 'texture', { condition: () => Format.per_group_texture }));
-            // Make it so moving a part will update texture faces
-            let callback = () => Canvas.updateAllFaces();
-            Blockbench.addListener('finish_edit', callback);
-            defer(() => Blockbench.removeListener('finish_edit', callback));
-        }
-        (0,_features_vanilla_roots__WEBPACK_IMPORTED_MODULE_1__.setup_vanilla_roots)();
+        (0,_features_mimic_parts__WEBPACK_IMPORTED_MODULE_1__.setup_mimic_parts)();
         (0,_features_vanilla_texture_override__WEBPACK_IMPORTED_MODULE_2__.setup_vanilla_texture_override)();
         (0,_format__WEBPACK_IMPORTED_MODULE_0__.create_format)();
     },
@@ -531,7 +422,7 @@ function create_format() {
         integer_size: false,
         meshes: true,
         texture_meshes: false,
-        locators: true,
+        locators: false,
         rotation_limit: false,
         rotation_snap: false,
         uv_rotation: true,
@@ -550,6 +441,7 @@ function create_format() {
         box_uv_float_size: true,
         java_cube_shading_properties: false,
         cullfaces: true,
+        node_name_regex: undefined,
         render_sides: 'front',
         cube_size_limiter: undefined,
         codec: (0,_figura__WEBPACK_IMPORTED_MODULE_1__.deleteLater)(new Codec(_figura__WEBPACK_IMPORTED_MODULE_1__.PLUGIN_ID, {
@@ -643,9 +535,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 // Import the given figmodel into the project
 function parse_figura_data(data) {
-    Project.textures = checkArray(data.textures, 'Invalid figmodel - missing textures key')
+    Project.textures = checkArray(data.textures, 'Invalid figmodel - missing or invalid textures array')
         .map(texture => parseTexture(checkObject(texture, 'Invalid figmodel - texture must be an {object}')));
-    Project.outliner = parseGroup(checkObject(data.part_data, 'Invalid figmodel - missing part_data key'), Project.textures, [0, 0, 0], true).children;
+    Project.outliner = checkArray(data.roots, 'Invalid figmodel - missing or invalid roots array')
+        .map(g => parseGroup(g, Project.textures, undefined));
     if (data.item_display_data)
         Project.display_settings = parseItemDisplayData(checkObject(data.item_display_data, 'Invalid figmodel - item display data should be object'));
 }
@@ -663,44 +556,45 @@ function parseTexture(obj) {
     tex.uv_height = uv_size[1];
     return tex;
 }
-function parseGroup(obj, textures, absolute_parent_origin, toplevel = false) {
+function parseGroup(obj, textures, parent) {
+    var _a;
     let name = checkString(obj.name, 'Invalid figmodel - group has missing or invalid name');
-    let origin = absolute_parent_origin.slice().V3_add(checkVec3(obj.origin, 'Invalid figmodel - group "' + name + '" has missing or invalid origin'));
+    let origin = ((_a = parent === null || parent === void 0 ? void 0 : parent.origin.slice()) !== null && _a !== void 0 ? _a : [0, 0, 0]).V3_add(checkVec3(obj.origin, 'Invalid figmodel - group "' + name + '" has missing or invalid origin'));
     let texture = mapOptional(optInteger(obj.texture_index, 0, textures.length, 'Invalid figmodel - group "' + name + '" texture index must be a number in range'), i => textures[i]);
     let group = new Group({
         name,
         origin,
         rotation: checkVec3(obj.rotation, 'Invalid figmodel - group "' + name + '" has missing or invalid rotation'),
         texture: texture === null || texture === void 0 ? void 0 : texture.uuid,
-        vanilla_root: optString(obj.vanilla_root, 'Invalid figmodel - group "' + name + '" vanilla_root should be optional string'),
-        replace_vanilla_root: optBoolean(obj.replace_vanilla_root, 'Invalid figmodel - group "' + name + '" replace_vanilla_root should be optional boolean'),
+        mimic_part: optString(obj.mimic_part, 'Invalid figmodel - group "' + name + '" mimic_part should be optional string'),
         visibility: true,
     });
-    if (!toplevel)
-        group.init();
-    // Add child groups, cubes, and meshes
-    group.children = checkArray(obj.children, 'Invalid figmodel - group "' + name + '" has missing or invalid children')
-        .map(child => parseGroup(checkObject(child, 'Invalid figmodel - group must be an {object}'), textures, origin));
+    group.parent = parent !== null && parent !== void 0 ? parent : 'root';
+    group.init();
+    group.addTo(parent);
+    // Fetch/check child groups, cubes, and meshes
+    let children = checkArray(obj.children, 'Invalid figmodel - group "' + name + '" has missing or invalid children');
     let cubes = checkArray(obj.cubes, 'Invalid figmodel - group "' + name + '" has missing or invalid cubes');
     let meshes = checkArray(obj.meshes, 'Invalid figmodel - group "' + name + '" has missing or invalid meshes');
+    // Verify texture exists if there are cubes/meshes
     if (cubes.length !== 0 || meshes.length !== 0) {
         if (!texture)
             throw 'Invalid figmodel - group "' + name + '" has cubes or meshes, but does not have a texture';
-        if (toplevel)
-            throw 'Invalid figmodel - top-level group may not have cubes or meshes';
     }
-    cubes.forEach(child => parseCube(checkObject(child, 'Invalid figmodel - cube must be an {object}'), origin).addTo(group));
-    meshes.forEach(child => parseMesh(checkObject(child, 'Invalid figmodel - mesh must be an {object}'), origin).addTo(group));
+    // Process
+    children.forEach(child => parseGroup(checkObject(child, 'Invalid figmodel - group must be an {object}'), textures, group));
+    cubes.forEach(cube => parseCube(checkObject(cube, 'Invalid figmodel - cube must be an {object}'), group));
+    meshes.forEach(mesh => parseMesh(checkObject(mesh, 'Invalid figmodel - mesh must be an {object}'), group));
     return group;
 }
-function parseCube(obj, absolute_parent_origin) {
+function parseCube(obj, parent) {
     // Fetch main values, adjust from/to/origin from relative to absolute
-    let from = checkVec3(obj.from, 'Invalid figmodel - cube has missing or invalid "from"').V3_add(absolute_parent_origin);
-    let to = checkVec3(obj.to, 'Invalid figmodel - cube has missing or invalid "to"').V3_add(absolute_parent_origin);
-    let origin = checkVec3(obj.origin, 'Invalid figmodel - cube has missing or invalid origin').V3_add(absolute_parent_origin);
+    let from = checkVec3(obj.from, 'Invalid figmodel - cube has missing or invalid "from"').V3_add(parent.origin);
+    let to = checkVec3(obj.to, 'Invalid figmodel - cube has missing or invalid "to"').V3_add(parent.origin);
+    let origin = checkVec3(obj.origin, 'Invalid figmodel - cube has missing or invalid origin').V3_add(parent.origin);
     let rotation = checkVec3(obj.rotation, 'Invalid figmodel - cube has missing or invalid rotation');
     let inflate = 0;
-    // If all elements of inflateCec are the same (Very common!) Then set the inflate value.
+    // If all elements of inflateVec are the same (Very common!) Then set the inflate value.
     // Otherwise, modify from/to directly.
     let inflateVec = checkVec3(obj.inflate, 'Invalid figmodel - cube has missing or invalid "inflate"');
     if (inflateVec.every(v => v === inflateVec[0])) {
@@ -727,23 +621,31 @@ function parseCube(obj, absolute_parent_origin) {
             rotation,
         };
     });
-    // Return
-    return new Cube({
+    // Create and setup cube
+    let cube = new Cube({
         name: 'cube',
         from, to, inflate,
         origin, rotation,
         faces: bb_faces,
         box_uv: false
-    }).init();
+    });
+    cube.parent = parent;
+    cube.init();
+    cube.addTo(parent);
+    return cube;
 }
-function parseMesh(obj, absolute_parent_origin) {
-    let origin = checkVec3(obj.origin, 'Invalid figmodel - mesh has missing or invalid origin').V3_add(absolute_parent_origin);
+function parseMesh(obj, parent) {
+    let origin = checkVec3(obj.origin, 'Invalid figmodel - mesh has missing or invalid origin').V3_add(parent.origin);
     let rotation = checkVec3(obj.rotation, 'Invalid figmodel - mesh has missing or invalid rotation');
+    // Create and setup mesh
     let mesh = new Mesh({
         name: 'mesh',
         origin, rotation,
         vertices: {}, // Need empty object, otherwise it automatically adds a cube
     });
+    mesh.parent = parent;
+    mesh.init();
+    mesh.addTo(parent);
     // Parse and add vertices
     let positions = [];
     let vertices = checkArray(obj.vertices, 'Invalid figmodel - mesh has missing or invalid vertices');
@@ -771,7 +673,7 @@ function parseMesh(obj, absolute_parent_origin) {
         }));
     }
     mesh.addFaces(...bb_faces);
-    return mesh.init();
+    return mesh;
 }
 const contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
 function parseItemDisplayData(data) {

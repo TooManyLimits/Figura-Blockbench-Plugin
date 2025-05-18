@@ -3,12 +3,10 @@
 
 // Add our own properties to the Group class (and options) so we don't need to cast to set/get them.
 interface Group {
-	vanilla_root?: string,
-	replace_vanilla_root?: boolean,
+	mimic_part?: string,
 }
 interface GroupOptions {
-	vanilla_root?: string,
-	replace_vanilla_root?: boolean,
+	mimic_part?: string,
 	texture?: string,
 }
 

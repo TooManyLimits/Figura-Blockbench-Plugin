@@ -4,11 +4,6 @@ import { FiguraCube, FiguraCubeFace, FiguraData, FiguraGroup, FiguraItemDisplayC
 // Can throw a string error for display.
 export function compile_figura_data(): FiguraData {
 
-	// Generate groups!
-	let parts = Project!.outliner
-		.filter(part => part instanceof Group)
-		.map(group => compile_group(group, [0,0,0]));
-
 	// Cubes or meshes are not currently allowed at the top level, because they're not in a group, so cannot have a texture index.
 	for (var node of Project!.outliner) {
 		if (node instanceof Cube || node instanceof Mesh) {
@@ -16,6 +11,11 @@ export function compile_figura_data(): FiguraData {
 			throw 'Top-level cubes and meshes, like "' + node.name + '", are not supported yet! For now, they must be wrapped in a group.';
 		}
 	}
+
+	// Generate groups!
+	let roots = Project!.outliner
+		.filter(part => part instanceof Group)
+		.map(group => compile_group(group, [0,0,0]));
 
 	// Fetch item display data
 	let display_contexts: FiguraItemDisplayContext[] = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
@@ -33,9 +33,7 @@ export function compile_figura_data(): FiguraData {
 
 	// Return.
 	return {
-		part_data: {
-			name: "", origin: [0,0,0], rotation: [0,0,0], children: parts, cubes: [], meshes: []
-		},
+		roots,
 		textures: Texture.all.map(tex => ({
 			name: tex.name,
 			path: tex.path,
@@ -83,11 +81,10 @@ function compile_group(group: Group, absolute_parent_origin: ArrayVector3): Figu
 		origin: absolute_origin.slice().V3_subtract(absolute_parent_origin),
 		rotation: group.rotation,
 		children: children_groups,
+		mimic_part: group.mimic_part || undefined,
 		texture_index: texture_index,
 		cubes: cubes,
 		meshes: meshes,
-		vanilla_root: group.vanilla_root || undefined,
-		replace_vanilla_root: group.replace_vanilla_root || undefined
 	}
 }
 

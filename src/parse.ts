@@ -1,16 +1,11 @@
 
 // Import the given figmodel into the project
 export function parse_figura_data(data: any) {
-
-	Project!.textures = checkArray(data.textures, 'Invalid figmodel - missing textures key')
+	Project!.textures = checkArray(data.textures, 'Invalid figmodel - missing or invalid textures array')
 		.map(texture => parseTexture(checkObject(texture, 'Invalid figmodel - texture must be an {object}')));
 
-	Project!.outliner = parseGroup(
-		checkObject(data.part_data, 'Invalid figmodel - missing part_data key'), 
-		Project!.textures,
-		[0, 0, 0],
-		true, // Top-level, don't initialize this group
-	).children;
+	Project!.outliner = checkArray(data.roots, 'Invalid figmodel - missing or invalid roots array')
+		.map(g => parseGroup(g, Project!.textures, undefined));
 
 	if (data.item_display_data)
 		Project!.display_settings = parseItemDisplayData(checkObject(data.item_display_data, 'Invalid figmodel - item display data should be object'));
@@ -32,9 +27,9 @@ function parseTexture(obj: any): Texture {
 	return tex;
 }
 
-function parseGroup(obj: any, textures: Texture[], absolute_parent_origin: ArrayVector3, toplevel: boolean = false): Group {
+function parseGroup(obj: any, textures: Texture[], parent: Group | undefined): Group {
 	let name = checkString(obj.name, 'Invalid figmodel - group has missing or invalid name');
-	let origin = absolute_parent_origin.slice().V3_add(checkVec3(obj.origin, 'Invalid figmodel - group "' + name + '" has missing or invalid origin'));
+	let origin = (parent?.origin.slice() ?? [0, 0, 0]).V3_add(checkVec3(obj.origin, 'Invalid figmodel - group "' + name + '" has missing or invalid origin'));
 	let texture = mapOptional(optInteger(obj.texture_index, 0, textures.length, 'Invalid figmodel - group "' + name + '" texture index must be a number in range'), i => textures[i]);
 
 	let group = new Group({
@@ -42,39 +37,41 @@ function parseGroup(obj: any, textures: Texture[], absolute_parent_origin: Array
 		origin,
 		rotation: checkVec3(obj.rotation, 'Invalid figmodel - group "' + name + '" has missing or invalid rotation'),
 		texture: texture?.uuid,
-		vanilla_root: optString(obj.vanilla_root, 'Invalid figmodel - group "' + name + '" vanilla_root should be optional string'),
-		replace_vanilla_root: optBoolean(obj.replace_vanilla_root, 'Invalid figmodel - group "' + name + '" replace_vanilla_root should be optional boolean'),
+		mimic_part: optString(obj.mimic_part, 'Invalid figmodel - group "' + name + '" mimic_part should be optional string'),
 		visibility: true,
 	});
-	if (!toplevel) group.init()
+	group.parent = parent ?? 'root';
+	group.init();
+	group.addTo(parent);
 
-	// Add child groups, cubes, and meshes
-	group.children = checkArray(obj.children, 'Invalid figmodel - group "' + name + '" has missing or invalid children')
-		.map(child => parseGroup(checkObject(child, 'Invalid figmodel - group must be an {object}'), textures, origin));
-
+	// Fetch/check child groups, cubes, and meshes
+	let children = checkArray(obj.children, 'Invalid figmodel - group "' + name + '" has missing or invalid children')
 	let cubes = checkArray(obj.cubes, 'Invalid figmodel - group "' + name + '" has missing or invalid cubes');
 	let meshes = checkArray(obj.meshes, 'Invalid figmodel - group "' + name + '" has missing or invalid meshes');
 
+	// Verify texture exists if there are cubes/meshes
 	if (cubes.length !== 0 || meshes.length !== 0) {
 		if (!texture) throw 'Invalid figmodel - group "' + name + '" has cubes or meshes, but does not have a texture';
-		if (toplevel) throw 'Invalid figmodel - top-level group may not have cubes or meshes';
 	}
-	cubes.forEach(child => parseCube(checkObject(child, 'Invalid figmodel - cube must be an {object}'), origin).addTo(group));
-	meshes.forEach(child => parseMesh(checkObject(child, 'Invalid figmodel - mesh must be an {object}'), origin).addTo(group));
+
+	// Process
+	children.forEach(child => parseGroup(checkObject(child, 'Invalid figmodel - group must be an {object}'), textures, group));
+	cubes.forEach(cube => parseCube(checkObject(cube, 'Invalid figmodel - cube must be an {object}'), group));
+	meshes.forEach(mesh => parseMesh(checkObject(mesh, 'Invalid figmodel - mesh must be an {object}'), group));
 	
 	return group;
 }
 
-function parseCube(obj: any, absolute_parent_origin: ArrayVector3): Cube {
+function parseCube(obj: any, parent: Group): Cube {
 	
 	// Fetch main values, adjust from/to/origin from relative to absolute
-	let from = checkVec3(obj.from, 'Invalid figmodel - cube has missing or invalid "from"').V3_add(absolute_parent_origin);
-	let to = checkVec3(obj.to, 'Invalid figmodel - cube has missing or invalid "to"').V3_add(absolute_parent_origin);
-	let origin = checkVec3(obj.origin, 'Invalid figmodel - cube has missing or invalid origin').V3_add(absolute_parent_origin);
+	let from = checkVec3(obj.from, 'Invalid figmodel - cube has missing or invalid "from"').V3_add(parent.origin);
+	let to = checkVec3(obj.to, 'Invalid figmodel - cube has missing or invalid "to"').V3_add(parent.origin);
+	let origin = checkVec3(obj.origin, 'Invalid figmodel - cube has missing or invalid origin').V3_add(parent.origin);
 	let rotation = checkVec3(obj.rotation, 'Invalid figmodel - cube has missing or invalid rotation');
 	let inflate = 0;
 
-	// If all elements of inflateCec are the same (Very common!) Then set the inflate value.
+	// If all elements of inflateVec are the same (Very common!) Then set the inflate value.
 	// Otherwise, modify from/to directly.
 	let inflateVec = checkVec3(obj.inflate, 'Invalid figmodel - cube has missing or invalid "inflate"');
 	if (inflateVec.every(v => v === inflateVec[0])) {
@@ -101,26 +98,34 @@ function parseCube(obj: any, absolute_parent_origin: ArrayVector3): Cube {
 		}
 	})
 
-	// Return
-	return new Cube({
+	// Create and setup cube
+	let cube = new Cube({
 		name: 'cube',
 		from, to, inflate,
 		origin, rotation,
 		faces: bb_faces,
 		box_uv: false
-	}).init();
+	});
+	cube.parent = parent;
+	cube.init();
+	cube.addTo(parent);
+	return cube;
 }
 
-function parseMesh(obj: any, absolute_parent_origin: ArrayVector3): Mesh {
+function parseMesh(obj: any, parent: Group): Mesh {
 
-	let origin = checkVec3(obj.origin, 'Invalid figmodel - mesh has missing or invalid origin').V3_add(absolute_parent_origin);
+	let origin = checkVec3(obj.origin, 'Invalid figmodel - mesh has missing or invalid origin').V3_add(parent.origin);
 	let rotation = checkVec3(obj.rotation, 'Invalid figmodel - mesh has missing or invalid rotation');
 
+	// Create and setup mesh
 	let mesh = new Mesh({
 		name: 'mesh',
 		origin, rotation,
 		vertices: {}, // Need empty object, otherwise it automatically adds a cube
 	});
+	mesh.parent = parent;
+	mesh.init();
+	mesh.addTo(parent);
 
 	// Parse and add vertices
 	let positions: ArrayVector3[] = [];
@@ -153,7 +158,7 @@ function parseMesh(obj: any, absolute_parent_origin: ArrayVector3): Mesh {
 	}
 	mesh.addFaces(...bb_faces);
 
-	return mesh.init();
+	return mesh;
 }
 
 const contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];

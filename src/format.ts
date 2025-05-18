@@ -32,7 +32,7 @@ export function create_format() {
 		integer_size: false,
 		meshes: true,
 		texture_meshes: false,
-		locators: true,
+		locators: false,
 		rotation_limit: false,
 		rotation_snap: false,
 		uv_rotation: true,
@@ -51,6 +51,7 @@ export function create_format() {
 		box_uv_float_size: true,
 		java_cube_shading_properties: false,
 		cullfaces: true,
+		node_name_regex: undefined,
 		render_sides: 'front',
 		cube_size_limiter: undefined,
 

@@ -1,5 +1,5 @@
 import { create_format } from './format';
-import { setup_vanilla_roots } from './features/vanilla_roots';
+import { setup_mimic_parts } from './features/mimic_parts';
 import { setup_vanilla_texture_override } from './features/vanilla_texture_override';
 
 // Global constants
@@ -33,7 +33,7 @@ BBPlugin.register(PLUGIN_ID, {
 			'action.export_figura': 'Export Figura Model'
 		});
 
-		setup_vanilla_roots();
+		setup_mimic_parts();
 		setup_vanilla_texture_override();
 		create_format();
 	},
