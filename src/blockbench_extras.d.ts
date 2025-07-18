@@ -35,6 +35,19 @@ interface ModelProject {
 interface OutlinerNode {
 	needsUniqueName: ConditionResolvable
 }
+interface Action {
+	menu_node: HTMLElement
+}
+// Whoever made the types thought it was "rotations" when it's actually "rotation".
+interface BoneAnimator {
+	rotation: _Keyframe[]
+	rotations: undefined
+}
+interface NullObjectAnimator {
+	rotation: _Keyframe[]
+	rotations: undefined
+}
 
+declare var open_menu: Menu | null
 declare var flipNameOnAxis: (node: OutlinerNode, axis: number, check?: (node: OutlinerNode) => boolean, original_name?: string) => void;
 declare var mirrorSelected: (axis: number) => void;

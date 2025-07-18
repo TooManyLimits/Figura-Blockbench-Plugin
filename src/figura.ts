@@ -17,6 +17,48 @@ export function defer(func: () => void) {
 	deletables.push({delete: func});
 }
 
+// Util functions (todo maybe move to another file)
+
+// Map values of a string-keyed record from V1 to V2. The key is also passed to the mapper func.
+export function mapValues<V1, V2>(obj: Record<string, V1>, func: (key: string, val: V1) => V2): Record<string, V2> {
+	const result: Record<string, V2> = {}
+	for (const key in obj) {
+		result[key] = func(key, obj[key]);
+	}
+	return result
+}
+export function forEachEntry<V>(obj: Record<string, V>, func: (key: string, val: V) => void) {
+	for (const key in obj) {
+		func(key, obj[key]);
+	}
+}
+// Convert a list of items into an association from name -> value
+export function associate<T, V>(items: T[], func: (item: T) => [string, V]): Record<string, V> {
+	const result: Record<string, V> = {}
+	for (const item of items) {
+		const [key, val] = func(item)
+		result[key] = val
+	}
+	return result
+}
+// Group adjacent values by comparing their extracted keys
+export function groupAdjacent<T, K>(items: T[], key_extractor: (item: T) => K): T[][] {
+	const result: T[][] = [];
+	var i = 0;
+	while (i < items.length) {
+		const key = key_extractor(items[i])
+		const nextArr: T[] = [items[i]]
+		i++;
+		while (i < items.length && key_extractor(items[i]) === key) {
+			nextArr.push(items[i]);
+			i++;
+		}
+		result.push(nextArr)
+	}
+	return result;
+}
+
+
 // Register the plugin
 BBPlugin.register(PLUGIN_ID, {
 	title: 'Figura Mod Integration',

@@ -12,6 +12,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   compile_figura_data: () => (/* binding */ compile_figura_data)
 /* harmony export */ });
+/* harmony import */ var _figura__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./figura */ "./src/figura.ts");
+
 // Compile the global data in the project into a FiguraData.
 // Can throw a string error for display.
 function compile_figura_data() {
@@ -23,9 +25,17 @@ function compile_figura_data() {
         }
     }
     // Generate groups!
-    let roots = Project.outliner
-        .filter(part => part instanceof Group)
-        .map(group => compile_group(group, [0, 0, 0]));
+    let roots = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.associate)(Project.outliner.filter(part => part instanceof Group), group => [group.name, compile_group(group, [0, 0, 0])]);
+    // Textures
+    let textures = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.associate)(Texture.all, tex => [tex.name, {
+            path: tex.path,
+            uv_size: [tex.uv_width, tex.uv_height],
+            vanilla_texture_override: tex.vanilla_texture_override,
+            png_bytes_base64: tex.getBase64()
+        }]);
+    // Animations
+    let animations = {};
+    AnimationItem.all.forEach(anim => animations[anim.name] = compile_animation(anim));
     // Fetch item display data
     let display_contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
     let item_display_data = {};
@@ -42,13 +52,8 @@ function compile_figura_data() {
     // Return.
     return {
         roots,
-        textures: Texture.all.map(tex => ({
-            name: tex.name,
-            path: tex.path,
-            uv_size: [tex.uv_width, tex.uv_height],
-            vanilla_texture_override: tex.vanilla_texture_override,
-            png_bytes_base64: tex.getBase64()
-        })),
+        textures,
+        animations,
         item_display_data
     };
 }
@@ -63,9 +68,7 @@ function compile_group(group, absolute_parent_origin) {
     let texture = (texture_index !== undefined) ? Texture.all[texture_index] : null;
     // Traverse sub-elements...
     let absolute_origin = group.origin;
-    let children_groups = group.children
-        .filter(node => node instanceof Group)
-        .map(group => compile_group(group, absolute_origin));
+    let children_groups = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.associate)(group.children.filter(node => node instanceof Group), group => [group.name, compile_group(group, absolute_origin)]);
     // Cubes and meshes require there to be a texture applied
     if (!texture && group.children.some(node => node instanceof Cube || node instanceof Mesh)) {
         group.select();
@@ -78,7 +81,6 @@ function compile_group(group, absolute_parent_origin) {
         .filter(node => node instanceof Mesh)
         .map(mesh => compile_mesh(mesh, absolute_origin));
     return {
-        name: group.name,
         origin: absolute_origin.slice().V3_subtract(absolute_parent_origin),
         rotation: group.rotation,
         children: children_groups,
@@ -143,6 +145,66 @@ function compile_mesh(mesh, absolute_parent_origin) {
             };
         })
     };
+}
+function compile_animation(anim) {
+    var _a, _b, _c;
+    let parts = {};
+    for (let uuid in anim.animators) {
+        let animator = anim.animators[uuid];
+        if (animator.keyframes && animator.keyframes.length && animator instanceof BoneAnimator) {
+            // Compute group path
+            var group = animator.getGroup();
+            var path = group.name;
+            while (group.parent && group.parent !== 'root') {
+                group = group.parent;
+                path = group.name + "/" + path;
+            }
+            // Compile keyframes
+            let keyframeHolder = {
+                origin: (_a = animator.position) === null || _a === void 0 ? void 0 : _a.flatMap(kf => compile_vec3_keyframe(kf, anim.snapping)),
+                rotation: (_b = animator.rotation) === null || _b === void 0 ? void 0 : _b.flatMap(kf => compile_vec3_keyframe(kf, anim.snapping)),
+                scale: (_c = animator.scale) === null || _c === void 0 ? void 0 : _c.flatMap(kf => compile_vec3_keyframe(kf, anim.snapping))
+            };
+            // Store
+            parts[path] = keyframeHolder;
+        }
+    }
+    return {
+        length: anim.length,
+        snapping: anim.snapping,
+        parts,
+        script_keyframes: [] // TODO
+    };
+}
+// Because blockbench keyframes have a "pre" and a "post", one BB keyframe
+// can compile into multiple figura keyframes.
+function compile_vec3_keyframe(keyframe, snapping) {
+    // Time
+    let time = snapping ? Math.round(keyframe.time * snapping) : keyframe.time;
+    // Interpolation
+    let bbinterp = keyframe.interpolation;
+    let interpolation;
+    switch (bbinterp) {
+        case 'linear':
+        case 'catmullrom':
+        case 'step':
+            interpolation = bbinterp;
+            break;
+        case 'bezier':
+            interpolation = {
+                kind: 'bezier',
+                left_time: keyframe.bezier_left_time,
+                left_value: keyframe.bezier_left_value,
+                right_time: keyframe.bezier_right_time,
+                right_value: keyframe.bezier_right_value
+            };
+    }
+    // Multiple data points (pre/post) turn into multiple keyframes in our format.
+    return keyframe.data_points.map(datapoint => ({
+        time,
+        data: [datapoint.x, datapoint.y, datapoint.z],
+        interpolation
+    }));
 }
 
 
@@ -233,11 +295,19 @@ function expand_model_parts(action_prefix, parts, model_name) {
             }));
         }
         else {
-            return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + part[0], {
+            const action = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + part[0], {
                 name: part[0],
                 children: expand_model_parts(action_prefix + '.' + part[0], part[1], model_name),
-                click() { }
+                click() { oneGroup(group => group.mimic_part = model_name + '/' + part[0]); }
             }));
+            // Manually add event listener, since it normally doesn't work on actions with children
+            action.menu_node.addEventListener('click', event => {
+                if (event.target !== action.menu_node)
+                    return;
+                action.trigger(event);
+                open_menu === null || open_menu === void 0 ? void 0 : open_menu.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
+            });
+            return action;
         }
     });
 }
@@ -318,8 +388,12 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   FILE_EXTENSION: () => (/* binding */ FILE_EXTENSION),
 /* harmony export */   PLUGIN_ID: () => (/* binding */ PLUGIN_ID),
+/* harmony export */   associate: () => (/* binding */ associate),
 /* harmony export */   defer: () => (/* binding */ defer),
-/* harmony export */   deleteLater: () => (/* binding */ deleteLater)
+/* harmony export */   deleteLater: () => (/* binding */ deleteLater),
+/* harmony export */   forEachEntry: () => (/* binding */ forEachEntry),
+/* harmony export */   groupAdjacent: () => (/* binding */ groupAdjacent),
+/* harmony export */   mapValues: () => (/* binding */ mapValues)
 /* harmony export */ });
 /* harmony import */ var _format__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./format */ "./src/format.ts");
 /* harmony import */ var _features_mimic_parts__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./features/mimic_parts */ "./src/features/mimic_parts.ts");
@@ -339,6 +413,45 @@ function deleteLater(x) {
 }
 function defer(func) {
     deletables.push({ delete: func });
+}
+// Util functions (todo maybe move to another file)
+// Map values of a string-keyed record from V1 to V2. The key is also passed to the mapper func.
+function mapValues(obj, func) {
+    const result = {};
+    for (const key in obj) {
+        result[key] = func(key, obj[key]);
+    }
+    return result;
+}
+function forEachEntry(obj, func) {
+    for (const key in obj) {
+        func(key, obj[key]);
+    }
+}
+// Convert a list of items into an association from name -> value
+function associate(items, func) {
+    const result = {};
+    for (const item of items) {
+        const [key, val] = func(item);
+        result[key] = val;
+    }
+    return result;
+}
+// Group adjacent values by comparing their extracted keys
+function groupAdjacent(items, key_extractor) {
+    const result = [];
+    var i = 0;
+    while (i < items.length) {
+        const key = key_extractor(items[i]);
+        const nextArr = [items[i]];
+        i++;
+        while (i < items.length && key_extractor(items[i]) === key) {
+            nextArr.push(items[i]);
+            i++;
+        }
+        result.push(nextArr);
+    }
+    return result;
 }
 // Register the plugin
 BBPlugin.register(PLUGIN_ID, {
@@ -369,6 +482,325 @@ BBPlugin.register(PLUGIN_ID, {
 
 /***/ }),
 
+/***/ "./src/figura_data.guard.ts":
+/*!**********************************!*\
+  !*** ./src/figura_data.guard.ts ***!
+  \**********************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   isFiguraAnim: () => (/* binding */ isFiguraAnim),
+/* harmony export */   isFiguraCube: () => (/* binding */ isFiguraCube),
+/* harmony export */   isFiguraCubeFace: () => (/* binding */ isFiguraCubeFace),
+/* harmony export */   isFiguraData: () => (/* binding */ isFiguraData),
+/* harmony export */   isFiguraGroup: () => (/* binding */ isFiguraGroup),
+/* harmony export */   isFiguraItemDisplayContext: () => (/* binding */ isFiguraItemDisplayContext),
+/* harmony export */   isFiguraItemDisplayData: () => (/* binding */ isFiguraItemDisplayData),
+/* harmony export */   isFiguraItemDisplayTransform: () => (/* binding */ isFiguraItemDisplayTransform),
+/* harmony export */   isFiguraKeyframeHolder: () => (/* binding */ isFiguraKeyframeHolder),
+/* harmony export */   isFiguraKeyframeInterpolation: () => (/* binding */ isFiguraKeyframeInterpolation),
+/* harmony export */   isFiguraMesh: () => (/* binding */ isFiguraMesh),
+/* harmony export */   isFiguraMeshFace: () => (/* binding */ isFiguraMeshFace),
+/* harmony export */   isFiguraMeshVertex: () => (/* binding */ isFiguraMeshVertex),
+/* harmony export */   isFiguraMeshVertexInfo: () => (/* binding */ isFiguraMeshVertexInfo),
+/* harmony export */   isFiguraScriptKeyframe: () => (/* binding */ isFiguraScriptKeyframe),
+/* harmony export */   isFiguraTexture: () => (/* binding */ isFiguraTexture),
+/* harmony export */   isFiguraVec2: () => (/* binding */ isFiguraVec2),
+/* harmony export */   isFiguraVec3: () => (/* binding */ isFiguraVec3),
+/* harmony export */   isFiguraVectorKeyframe: () => (/* binding */ isFiguraVectorKeyframe)
+/* harmony export */ });
+function isFiguraData(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["roots"] === "undefined" ||
+            (typedObj["roots"] !== null &&
+                typeof typedObj["roots"] === "object" ||
+                typeof typedObj["roots"] === "function") &&
+                Object.entries(typedObj["roots"])
+                    .every(([key, value]) => (isFiguraGroup(value) &&
+                    typeof key === "string"))) &&
+        (typeof typedObj["textures"] === "undefined" ||
+            (typedObj["textures"] !== null &&
+                typeof typedObj["textures"] === "object" ||
+                typeof typedObj["textures"] === "function") &&
+                Object.entries(typedObj["textures"])
+                    .every(([key, value]) => (isFiguraTexture(value) &&
+                    typeof key === "string"))) &&
+        (typeof typedObj["animations"] === "undefined" ||
+            (typedObj["animations"] !== null &&
+                typeof typedObj["animations"] === "object" ||
+                typeof typedObj["animations"] === "function") &&
+                Object.entries(typedObj["animations"])
+                    .every(([key, value]) => (isFiguraAnim(value) &&
+                    typeof key === "string"))) &&
+        (typeof typedObj["item_display_data"] === "undefined" ||
+            isFiguraItemDisplayData(typedObj["item_display_data"])));
+}
+function isFiguraGroup(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["origin"] === "undefined" ||
+            isFiguraVec3(typedObj["origin"])) &&
+        (typeof typedObj["rotation"] === "undefined" ||
+            isFiguraVec3(typedObj["rotation"])) &&
+        (typeof typedObj["children"] === "undefined" ||
+            (typedObj["children"] !== null &&
+                typeof typedObj["children"] === "object" ||
+                typeof typedObj["children"] === "function") &&
+                Object.entries(typedObj["children"])
+                    .every(([key, value]) => (isFiguraGroup(value) &&
+                    typeof key === "string"))) &&
+        (typeof typedObj["mimic_part"] === "undefined" ||
+            typeof typedObj["mimic_part"] === "string") &&
+        (typeof typedObj["texture_index"] === "undefined" ||
+            typeof typedObj["texture_index"] === "number") &&
+        (typeof typedObj["cubes"] === "undefined" ||
+            Array.isArray(typedObj["cubes"]) &&
+                typedObj["cubes"].every((e) => isFiguraCube(e))) &&
+        (typeof typedObj["meshes"] === "undefined" ||
+            Array.isArray(typedObj["meshes"]) &&
+                typedObj["meshes"].every((e) => isFiguraMesh(e))));
+}
+function isFiguraCube(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["origin"] === "undefined" ||
+            isFiguraVec3(typedObj["origin"])) &&
+        (typeof typedObj["rotation"] === "undefined" ||
+            isFiguraVec3(typedObj["rotation"])) &&
+        isFiguraVec3(typedObj["from"]) &&
+        isFiguraVec3(typedObj["to"]) &&
+        (typeof typedObj["inflate"] === "undefined" ||
+            isFiguraVec3(typedObj["inflate"])) &&
+        Array.isArray(typedObj["faces"]) &&
+        (typedObj["faces"][0] === null ||
+            isFiguraCubeFace(typedObj["faces"][0])) &&
+        (typedObj["faces"][1] === null ||
+            isFiguraCubeFace(typedObj["faces"][1])) &&
+        (typedObj["faces"][2] === null ||
+            isFiguraCubeFace(typedObj["faces"][2])) &&
+        (typedObj["faces"][3] === null ||
+            isFiguraCubeFace(typedObj["faces"][3])) &&
+        (typedObj["faces"][4] === null ||
+            isFiguraCubeFace(typedObj["faces"][4])) &&
+        (typedObj["faces"][5] === null ||
+            isFiguraCubeFace(typedObj["faces"][5])));
+}
+function isFiguraCubeFace(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        isFiguraVec2(typedObj["uv_min"]) &&
+        isFiguraVec2(typedObj["uv_max"]) &&
+        (typeof typedObj["rotation"] === "undefined" ||
+            typedObj["rotation"] === 0 ||
+            typedObj["rotation"] === 90 ||
+            typedObj["rotation"] === 180 ||
+            typedObj["rotation"] === 270));
+}
+function isFiguraMesh(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["origin"] === "undefined" ||
+            isFiguraVec3(typedObj["origin"])) &&
+        (typeof typedObj["rotation"] === "undefined" ||
+            isFiguraVec3(typedObj["rotation"])) &&
+        Array.isArray(typedObj["vertices"]) &&
+        typedObj["vertices"].every((e) => isFiguraMeshVertex(e)) &&
+        Array.isArray(typedObj["faces"]) &&
+        typedObj["faces"].every((e) => isFiguraMeshFace(e)));
+}
+function isFiguraMeshVertex(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        isFiguraVec3(typedObj["pos"]));
+}
+function isFiguraMeshFace(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (Array.isArray(typedObj["vertices"]) &&
+            isFiguraMeshVertexInfo(typedObj["vertices"][0]) &&
+            isFiguraMeshVertexInfo(typedObj["vertices"][1]) &&
+            isFiguraMeshVertexInfo(typedObj["vertices"][2]) ||
+            Array.isArray(typedObj["vertices"]) &&
+                isFiguraMeshVertexInfo(typedObj["vertices"][0]) &&
+                isFiguraMeshVertexInfo(typedObj["vertices"][1]) &&
+                isFiguraMeshVertexInfo(typedObj["vertices"][2]) &&
+                isFiguraMeshVertexInfo(typedObj["vertices"][3])));
+}
+function isFiguraMeshVertexInfo(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        typeof typedObj["index"] === "number" &&
+        isFiguraVec2(typedObj["uv"]));
+}
+function isFiguraTexture(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["path"] === "undefined" ||
+            typeof typedObj["path"] === "string") &&
+        isFiguraVec2(typedObj["uv_size"]) &&
+        (typeof typedObj["vanilla_texture_override"] === "undefined" ||
+            typeof typedObj["vanilla_texture_override"] === "string") &&
+        typeof typedObj["png_bytes_base64"] === "string");
+}
+function isFiguraItemDisplayData(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["none"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["none"])) &&
+        (typeof typedObj["thirdperson_lefthand"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["thirdperson_lefthand"])) &&
+        (typeof typedObj["thirdperson_righthand"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["thirdperson_righthand"])) &&
+        (typeof typedObj["firstperson_lefthand"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["firstperson_lefthand"])) &&
+        (typeof typedObj["firstperson_righthand"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["firstperson_righthand"])) &&
+        (typeof typedObj["head"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["head"])) &&
+        (typeof typedObj["gui"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["gui"])) &&
+        (typeof typedObj["ground"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["ground"])) &&
+        (typeof typedObj["fixed"] === "undefined" ||
+            isFiguraItemDisplayTransform(typedObj["fixed"])));
+}
+function isFiguraItemDisplayContext(obj) {
+    const typedObj = obj;
+    return ((typedObj === "none" ||
+        typedObj === "thirdperson_lefthand" ||
+        typedObj === "thirdperson_righthand" ||
+        typedObj === "firstperson_lefthand" ||
+        typedObj === "firstperson_righthand" ||
+        typedObj === "head" ||
+        typedObj === "gui" ||
+        typedObj === "ground" ||
+        typedObj === "fixed"));
+}
+function isFiguraItemDisplayTransform(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["translation"] === "undefined" ||
+            isFiguraVec3(typedObj["translation"])) &&
+        (typeof typedObj["rotation"] === "undefined" ||
+            isFiguraVec3(typedObj["rotation"])) &&
+        (typeof typedObj["scale"] === "undefined" ||
+            isFiguraVec3(typedObj["scale"])));
+}
+function isFiguraAnim(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        typeof typedObj["length"] === "number" &&
+        (typeof typedObj["snapping"] === "undefined" ||
+            typeof typedObj["snapping"] === "number") &&
+        (typeof typedObj["loop"] === "undefined" ||
+            typedObj["loop"] === "once" ||
+            typedObj["loop"] === "hold" ||
+            typedObj["loop"] === "loop") &&
+        (typedObj["parts"] !== null &&
+            typeof typedObj["parts"] === "object" ||
+            typeof typedObj["parts"] === "function") &&
+        Object.entries(typedObj["parts"])
+            .every(([key, value]) => (isFiguraKeyframeHolder(value) &&
+            typeof key === "string")) &&
+        (typeof typedObj["script_keyframes"] === "undefined" ||
+            Array.isArray(typedObj["script_keyframes"]) &&
+                typedObj["script_keyframes"].every((e) => isFiguraScriptKeyframe(e))));
+}
+function isFiguraKeyframeHolder(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        (typeof typedObj["origin"] === "undefined" ||
+            Array.isArray(typedObj["origin"]) &&
+                typedObj["origin"].every((e) => isFiguraVectorKeyframe(e))) &&
+        (typeof typedObj["rotation"] === "undefined" ||
+            Array.isArray(typedObj["rotation"]) &&
+                typedObj["rotation"].every((e) => isFiguraVectorKeyframe(e))) &&
+        (typeof typedObj["scale"] === "undefined" ||
+            Array.isArray(typedObj["scale"]) &&
+                typedObj["scale"].every((e) => isFiguraVectorKeyframe(e))));
+}
+function isFiguraScriptKeyframe(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        typeof typedObj["time"] === "number" &&
+        typeof typedObj["data"] === "string");
+}
+function isFiguraVectorKeyframe(obj) {
+    const typedObj = obj;
+    return ((typedObj !== null &&
+        typeof typedObj === "object" ||
+        typeof typedObj === "function") &&
+        typeof typedObj["time"] === "number" &&
+        Array.isArray(typedObj["data"]) &&
+        (typeof typedObj["data"][0] === "string" ||
+            typeof typedObj["data"][0] === "number") &&
+        (typeof typedObj["data"][1] === "string" ||
+            typeof typedObj["data"][1] === "number") &&
+        (typeof typedObj["data"][2] === "string" ||
+            typeof typedObj["data"][2] === "number") &&
+        isFiguraKeyframeInterpolation(typedObj["interpolation"]));
+}
+function isFiguraKeyframeInterpolation(obj) {
+    const typedObj = obj;
+    return ((typedObj === "linear" ||
+        typedObj === "catmullrom" ||
+        typedObj === "step" ||
+        (typedObj !== null &&
+            typeof typedObj === "object" ||
+            typeof typedObj === "function") &&
+            typedObj["kind"] === "bezier" &&
+            isFiguraVec3(typedObj["left_time"]) &&
+            isFiguraVec3(typedObj["left_value"]) &&
+            isFiguraVec3(typedObj["right_time"]) &&
+            isFiguraVec3(typedObj["right_value"])));
+}
+function isFiguraVec2(obj) {
+    const typedObj = obj;
+    return (Array.isArray(typedObj) &&
+        typeof typedObj[0] === "number" &&
+        typeof typedObj[1] === "number");
+}
+function isFiguraVec3(obj) {
+    const typedObj = obj;
+    return (Array.isArray(typedObj) &&
+        typeof typedObj[0] === "number" &&
+        typeof typedObj[1] === "number" &&
+        typeof typedObj[2] === "number");
+}
+
+
+/***/ }),
+
 /***/ "./src/format.ts":
 /*!***********************!*\
   !*** ./src/format.ts ***!
@@ -382,15 +814,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _compile__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./compile */ "./src/compile.ts");
 /* harmony import */ var _figura__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./figura */ "./src/figura.ts");
 /* harmony import */ var _parse__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./parse */ "./src/parse.ts");
-var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 
 
 
@@ -476,32 +899,30 @@ function create_format() {
             // Compile operation might throw an error!
             compile() { return JSON.stringify((0,_compile__WEBPACK_IMPORTED_MODULE_0__.compile_figura_data)()); },
             // Custom export, just the same as regular export except does try-catch error handling on compile().
-            export() {
-                return __awaiter(this, void 0, void 0, function* () {
-                    if (Object.keys(this.export_options).length) {
-                        let result = yield this.promptExportOptions();
-                        if (result === null)
-                            return;
-                    }
-                    try {
-                        let compiled = this.compile(this.getExportOptions());
-                        Blockbench.export({
-                            resource_id: 'model',
-                            type: this.name,
-                            extensions: [this.extension],
-                            name: this.fileName(),
-                            startpath: this.startPath(),
-                            content: compiled,
-                            custom_writer: isApp ? (a, b) => this.write(a, b) : undefined,
-                        }, path => this.afterDownload(path));
-                    }
-                    catch (error) {
-                        Blockbench.showMessageBox({
-                            title: 'Error during figmodel export!',
-                            message: error
-                        });
-                    }
-                });
+            async export() {
+                if (Object.keys(this.export_options).length) {
+                    let result = await this.promptExportOptions();
+                    if (result === null)
+                        return;
+                }
+                try {
+                    let compiled = this.compile(this.getExportOptions());
+                    Blockbench.export({
+                        resource_id: 'model',
+                        type: this.name,
+                        extensions: [this.extension],
+                        name: this.fileName(),
+                        startpath: this.startPath(),
+                        content: compiled,
+                        custom_writer: isApp ? (a, b) => this.write(a, b) : undefined,
+                    }, path => this.afterDownload(path));
+                }
+                catch (error) {
+                    Blockbench.showMessageBox({
+                        title: 'Error during figmodel export!',
+                        message: error
+                    });
+                }
             },
             export_action: (0,_figura__WEBPACK_IMPORTED_MODULE_1__.deleteLater)(new Action('export_figura', {
                 category: 'file',
@@ -533,70 +954,79 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   parse_figura_data: () => (/* binding */ parse_figura_data)
 /* harmony export */ });
+/* harmony import */ var _figura__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./figura */ "./src/figura.ts");
+/* harmony import */ var _figura_data_guard__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./figura_data.guard */ "./src/figura_data.guard.ts");
+
+
 // Import the given figmodel into the project
 function parse_figura_data(data) {
-    Project.textures = checkArray(data.textures, 'Invalid figmodel - missing or invalid textures array')
-        .map(texture => parseTexture(checkObject(texture, 'Invalid figmodel - texture must be an {object}')));
-    Project.outliner = checkArray(data.roots, 'Invalid figmodel - missing or invalid roots array')
-        .map(g => parseGroup(g, Project.textures, undefined));
+    var _a, _b, _c;
+    // Ensure data is a valid figmodel
+    if (!(0,_figura_data_guard__WEBPACK_IMPORTED_MODULE_1__.isFiguraData)(data))
+        err('Invalid figmodel. Likely a bug with exporter! Please send your figmodel file to the Figura dev team so we can check it out!');
+    const figmodel = data;
+    // Process fields
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_a = data.textures) !== null && _a !== void 0 ? _a : {}, parseTexture);
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_b = data.roots) !== null && _b !== void 0 ? _b : {}, (name, group) => parseGroup(name, group, Project.textures, undefined));
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_c = data.animations) !== null && _c !== void 0 ? _c : {}, parseAnimation);
+    // Add item display data (is this correct, to assign to the global var?)
     if (data.item_display_data)
-        Project.display_settings = parseItemDisplayData(checkObject(data.item_display_data, 'Invalid figmodel - item display data should be object'));
+        Project.display_settings = parseItemDisplayData(data.item_display_data);
 }
-function parseTexture(obj) {
+function parseTexture(name, figuraTexture) {
     // Check and fetch fields
-    let name = checkString(obj.name, 'Invalid figmodel - texture has missing or invalid name');
-    let uv_size = checkVec2(obj.uv_size, 'Invalid figmodel - texture "' + name + '" has missing or invalid uv_size');
-    let dataUrl = 'data:image/png;base64,' + checkString(obj.png_bytes_base64, 'Invalid figmodel - texture "' + name + '" png data should be optional base64 string');
+    let dataUrl = 'data:image/png;base64,' + figuraTexture.png_bytes_base64;
     let tex = new Texture({
         name,
-        path: optString(obj.path, 'Invalid figmodel - texture "' + name + '" path should be optional string'),
-        vanilla_texture_override: optString(obj.vanilla_texture_override, 'Invalid figmodel - texture "' + name + '" vanilla texture override should be optional string')
+        path: figuraTexture.path,
+        vanilla_texture_override: figuraTexture.vanilla_texture_override,
     }).fromDataURL(dataUrl).add(false);
-    tex.uv_width = uv_size[0];
-    tex.uv_height = uv_size[1];
+    tex.uv_width = figuraTexture.uv_size[0];
+    tex.uv_height = figuraTexture.uv_size[1];
     return tex;
 }
-function parseGroup(obj, textures, parent) {
-    var _a;
-    let name = checkString(obj.name, 'Invalid figmodel - group has missing or invalid name');
-    let origin = ((_a = parent === null || parent === void 0 ? void 0 : parent.origin.slice()) !== null && _a !== void 0 ? _a : [0, 0, 0]).V3_add(checkVec3(obj.origin, 'Invalid figmodel - group "' + name + '" has missing or invalid origin'));
-    let texture = mapOptional(optInteger(obj.texture_index, 0, textures.length, 'Invalid figmodel - group "' + name + '" texture index must be a number in range'), i => textures[i]);
+function parseGroup(name, figuraGroup, textures, parent) {
+    var _a, _b, _c, _d, _e, _f;
+    let origin = ((_a = parent === null || parent === void 0 ? void 0 : parent.origin.slice()) !== null && _a !== void 0 ? _a : [0, 0, 0]).V3_add((_b = figuraGroup.origin) !== null && _b !== void 0 ? _b : [0, 0, 0]);
+    if (figuraGroup.texture_index !== undefined) // 0 is falsy, so explicitly check for undefined
+        checkInteger(figuraGroup.texture_index, 0, textures.length, 'Invalid figmodel - group "' + name + '" texture index must be a number in range');
+    let texture = figuraGroup.texture_index !== undefined ? textures[figuraGroup.texture_index] : undefined;
     let group = new Group({
         name,
         origin,
-        rotation: checkVec3(obj.rotation, 'Invalid figmodel - group "' + name + '" has missing or invalid rotation'),
+        rotation: (_c = figuraGroup.rotation) !== null && _c !== void 0 ? _c : [0, 0, 0],
         texture: texture === null || texture === void 0 ? void 0 : texture.uuid,
-        mimic_part: optString(obj.mimic_part, 'Invalid figmodel - group "' + name + '" mimic_part should be optional string'),
+        mimic_part: figuraGroup.mimic_part,
         visibility: true,
     });
     group.parent = parent !== null && parent !== void 0 ? parent : 'root';
-    group.init();
+    group.init(); // Calling group.init() while group.parent is undefined will cause an error :P
     group.addTo(parent);
     // Fetch/check child groups, cubes, and meshes
-    let children = checkArray(obj.children, 'Invalid figmodel - group "' + name + '" has missing or invalid children');
-    let cubes = checkArray(obj.cubes, 'Invalid figmodel - group "' + name + '" has missing or invalid cubes');
-    let meshes = checkArray(obj.meshes, 'Invalid figmodel - group "' + name + '" has missing or invalid meshes');
+    let cubes = (_d = figuraGroup.cubes) !== null && _d !== void 0 ? _d : [];
+    let meshes = (_e = figuraGroup.meshes) !== null && _e !== void 0 ? _e : [];
     // Verify texture exists if there are cubes/meshes
     if (cubes.length !== 0 || meshes.length !== 0) {
         if (!texture)
-            throw 'Invalid figmodel - group "' + name + '" has cubes or meshes, but does not have a texture';
+            err('Invalid figmodel - group "' + name + '" has cubes or meshes, but does not have a texture');
     }
     // Process
-    children.forEach(child => parseGroup(checkObject(child, 'Invalid figmodel - group must be an {object}'), textures, group));
-    cubes.forEach(cube => parseCube(checkObject(cube, 'Invalid figmodel - cube must be an {object}'), group));
-    meshes.forEach(mesh => parseMesh(checkObject(mesh, 'Invalid figmodel - mesh must be an {object}'), group));
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_f = figuraGroup.children) !== null && _f !== void 0 ? _f : {}, (childname, child) => parseGroup(childname, child, textures, group));
+    cubes.forEach(cube => parseCube(cube, group));
+    meshes.forEach(mesh => parseMesh(mesh, group));
     return group;
 }
-function parseCube(obj, parent) {
+function parseCube(figuraCube, parent) {
+    var _a, _b, _c;
     // Fetch main values, adjust from/to/origin from relative to absolute
-    let from = checkVec3(obj.from, 'Invalid figmodel - cube has missing or invalid "from"').V3_add(parent.origin);
-    let to = checkVec3(obj.to, 'Invalid figmodel - cube has missing or invalid "to"').V3_add(parent.origin);
-    let origin = checkVec3(obj.origin, 'Invalid figmodel - cube has missing or invalid origin').V3_add(parent.origin);
-    let rotation = checkVec3(obj.rotation, 'Invalid figmodel - cube has missing or invalid rotation');
+    let from = figuraCube.from.V3_add(parent.origin);
+    let to = figuraCube.to.V3_add(parent.origin);
+    let origin = ((_a = figuraCube.origin) !== null && _a !== void 0 ? _a : [0, 0, 0]).V3_add(parent.origin);
+    let rotation = (_b = figuraCube.rotation) !== null && _b !== void 0 ? _b : [0, 0, 0];
     let inflate = 0;
     // If all elements of inflateVec are the same (Very common!) Then set the inflate value.
     // Otherwise, modify from/to directly.
-    let inflateVec = checkVec3(obj.inflate, 'Invalid figmodel - cube has missing or invalid "inflate"');
+    let inflateVec = (_c = figuraCube.inflate) !== null && _c !== void 0 ? _c : [0, 0, 0];
     if (inflateVec.every(v => v === inflateVec[0])) {
         inflate = inflateVec[0];
     }
@@ -605,20 +1035,14 @@ function parseCube(obj, parent) {
         to.V3_add(inflateVec);
     }
     // Fetch faces
-    let faces = checkArray(obj.faces, 'Invalid figmodel - cube has missing or invalid "faces"');
     let bb_faces = {};
     ['west', 'east', 'down', 'up', 'north', 'south'].forEach((dir, i) => {
-        if (faces[i] === null)
+        if (figuraCube.faces[i] === null)
             return;
-        let face = checkObject(faces[i], 'Invalid figmodel - cube face should be {object} or null');
-        let uv_min = checkVec2(face.uv_min, 'Invalid figmodel - cube face has missing or invalid uv_min');
-        let uv_max = checkVec2(face.uv_max, 'Invalid figmodel - cube face has missing or invalid uv_max');
-        let rotation = face.rotation;
-        if (rotation !== 0 && rotation !== 90 && rotation !== 180 && rotation !== 270)
-            throw 'Invalid figmodel - cube face has invalid rotation. Expected 0, 90, 180, or 270, found ' + rotation;
+        let face = figuraCube.faces[i];
         bb_faces[dir] = {
-            uv: [uv_min[0], uv_min[1], uv_max[0], uv_max[1]],
-            rotation,
+            uv: [face.uv_min[0], face.uv_min[1], face.uv_max[0], face.uv_max[1]],
+            rotation: face.rotation,
         };
     });
     // Create and setup cube
@@ -634,9 +1058,10 @@ function parseCube(obj, parent) {
     cube.addTo(parent);
     return cube;
 }
-function parseMesh(obj, parent) {
-    let origin = checkVec3(obj.origin, 'Invalid figmodel - mesh has missing or invalid origin').V3_add(parent.origin);
-    let rotation = checkVec3(obj.rotation, 'Invalid figmodel - mesh has missing or invalid rotation');
+function parseMesh(figuraMesh, parent) {
+    var _a, _b;
+    let origin = ((_a = figuraMesh.origin) !== null && _a !== void 0 ? _a : [0, 0, 0]).V3_add(parent.origin);
+    let rotation = (_b = figuraMesh.rotation) !== null && _b !== void 0 ? _b : [0, 0, 0];
     // Create and setup mesh
     let mesh = new Mesh({
         name: 'mesh',
@@ -648,25 +1073,19 @@ function parseMesh(obj, parent) {
     mesh.addTo(parent);
     // Parse and add vertices
     let positions = [];
-    let vertices = checkArray(obj.vertices, 'Invalid figmodel - mesh has missing or invalid vertices');
-    for (let vert of vertices) {
-        let pos = checkVec3(vert.pos, 'Invalid figmodel - mesh vertex has missing or invalid position');
-        positions.push(pos);
+    for (let vert of figuraMesh.vertices) {
+        positions.push(vert.pos);
     }
     let vert_names = mesh.addVertices(...positions);
     // Parse and add faces
     let bb_faces = [];
-    let faces = checkArray(obj.faces, 'Invalid figmodel - mesh has missing or invalid faces');
-    for (let face of faces) {
-        let vertices = checkArray(face.vertices, 'Invalid figmodel - mesh face has missing or invalid vertices');
-        if (vertices.length < 3 || vertices.length > 4)
-            throw 'Invalid figmodel - mesh face should have 3 or 4 vertices, found ' + vertices.length;
+    for (let face of figuraMesh.faces) {
         let names = [];
         let uv = {};
-        for (let vertex of vertices) {
+        for (let vertex of face.vertices) {
             let index = checkInteger(vertex.index, 0, vert_names.length, 'Invalid figmodel - mesh face vertex has missing or invalid vertex index');
             names.push(vert_names[index]);
-            uv[vert_names[index]] = checkVec2(vertex.uv, 'Invalid figmodel - mesh face vertex has missing or invalid uv');
+            uv[vert_names[index]] = vertex.uv;
         }
         bb_faces.push(new MeshFace(mesh, {
             vertices: names, uv
@@ -677,66 +1096,96 @@ function parseMesh(obj, parent) {
 }
 const contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
 function parseItemDisplayData(data) {
+    var _a, _b, _c;
     let result = {};
     for (let context of contexts) {
         if (data[context]) {
-            checkObject(data[context], 'Invalid figmodel - expected object for item render context');
             result[context] = new DisplaySlot(context, {
-                translation: checkVec3(data[context].translation, 'Invalid figmodel - item render translation should be vec3'),
-                rotation: checkVec3(data[context].rotation, 'Invalid figmodel - item render rotation should be vec3'),
-                scale: checkVec3(data[context].scale, 'Invalid figmodel - item render scale should be vec3'),
+                translation: (_a = data[context].translation) !== null && _a !== void 0 ? _a : [0, 0, 0],
+                rotation: (_b = data[context].rotation) !== null && _b !== void 0 ? _b : [0, 0, 0],
+                scale: (_c = data[context].scale) !== null && _c !== void 0 ? _c : [1, 1, 1],
                 mirror: [false, false, false]
             });
         }
     }
     return result;
 }
-// Various random little helpers
-function mapOptional(item, mapper) {
-    return item === undefined ? undefined : mapper(item);
+// Parse and add an animation from the given data
+function parseAnimation(name, figuraAnim) {
+    var _a;
+    const anim = new Blockbench.Animation({
+        name,
+        length: figuraAnim.length,
+        snapping: figuraAnim.snapping
+    });
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_a = figuraAnim.parts) !== null && _a !== void 0 ? _a : {}, (path, kfholder) => {
+        var _a, _b, _c, _d;
+        // Path is a slash-separated list of part names, starting from the model root.
+        var items = Outliner.root;
+        var part = null;
+        for (const name of path.split('/')) {
+            const child = (_a = items.find(it => it.name == name)) !== null && _a !== void 0 ? _a : err('Invalid figmodel - could not locate part with path "' + path + '"');
+            if (child instanceof Group) {
+                items = child.children;
+                part = child;
+            }
+            else
+                err('Invalid figmodel - animations can only refer to groups, but "' + path + '" does not.');
+        }
+        if (!part)
+            err('Invalid figmodel - could not locate part with path "' + path + '"');
+        // We now have the part. Parse keyframes.
+        const animator = anim.getBoneAnimator(part);
+        parseKeyframes(animator, 'position', (_b = kfholder.origin) !== null && _b !== void 0 ? _b : [], figuraAnim.snapping);
+        parseKeyframes(animator, 'rotation', (_c = kfholder.rotation) !== null && _c !== void 0 ? _c : [], figuraAnim.snapping);
+        parseKeyframes(animator, 'scale', (_d = kfholder.scale) !== null && _d !== void 0 ? _d : [], figuraAnim.snapping);
+    });
+    // Add it to the project
+    anim.add();
 }
-function checkObject(item, msg) {
-    return (typeof item === 'object' && item !== null) ? item : err(msg);
+function parseKeyframes(animator, channel, frames, snapping) {
+    (0,_figura__WEBPACK_IMPORTED_MODULE_0__.groupAdjacent)(frames, f => f.time)
+        .map(adjacents => {
+        let kf = adjacents[0];
+        const options = {
+            channel,
+            data_points: adjacents.map(figvec => ({
+                x: figvec.data[0],
+                y: figvec.data[1],
+                z: figvec.data[2]
+            })),
+            time: adjacents[0].time / (snapping !== null && snapping !== void 0 ? snapping : 1),
+        };
+        switch (kf.interpolation) {
+            case 'linear':
+                options.interpolation = 'linear';
+                break;
+            case 'catmullrom':
+                options.interpolation = 'catmullrom';
+                break;
+            case 'step':
+                options.interpolation = 'step';
+                break;
+            default: switch (kf.interpolation.kind) {
+                case 'bezier':
+                    options.interpolation = 'bezier';
+                    options.bezier_left_time = kf.interpolation.left_time;
+                    options.bezier_left_value = kf.interpolation.left_value;
+                    options.bezier_right_time = kf.interpolation.right_value;
+                    options.bezier_right_value = kf.interpolation.right_value;
+                    break;
+                default:
+                    err("Invalid state during figmodel parsing; invalid interpolation, should never occur. Please contact devs!");
+            }
+        }
+        return options;
+    })
+        .forEach(kf => animator.addKeyframe(kf));
 }
+// Helpers
 // Min inclusive, max exclusive
 function checkInteger(item, min, max, msg) {
     return (Number.isInteger(item) && item >= min && item < max) ? item : err(msg);
-}
-function optInteger(item, min, max, msg) {
-    return item === undefined ? undefined : checkInteger(item, min, max, msg);
-}
-function checkString(item, msg) {
-    return typeof item === 'string' ? item : err(msg);
-}
-function optString(item, msg) {
-    return item === undefined ? undefined : checkString(item, msg);
-}
-function checkBoolean(item, msg) {
-    return typeof item === 'boolean' ? item : err(msg);
-}
-function optBoolean(item, msg) {
-    return item === undefined ? undefined : checkBoolean(item, msg);
-}
-function checkVec2(item, msg) {
-    if (!Array.isArray(item))
-        err(msg);
-    if (item.length != 2)
-        err(msg);
-    if (!item.every(elem => typeof elem === 'number'))
-        err(msg);
-    return item.slice();
-}
-function checkVec3(item, msg) {
-    if (!Array.isArray(item))
-        err(msg);
-    if (item.length != 3)
-        err(msg);
-    if (!item.every(elem => typeof elem === 'number'))
-        err(msg);
-    return item.slice();
-}
-function checkArray(item, msg) {
-    return Array.isArray(item) ? item : err(msg);
 }
 function err(message) {
     throw message;

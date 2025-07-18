@@ -1,4 +1,5 @@
-import { FiguraCube, FiguraCubeFace, FiguraData, FiguraGroup, FiguraItemDisplayContext, FiguraItemDisplayTransform, FiguraMesh, FiguraMeshFace, FiguraMeshVertex, FiguraMeshVertexInfo, FiguraVec2, FiguraVec3, Tuple } from "./figura_data";
+import { associate } from "./figura";
+import { FiguraAnim, FiguraCube, FiguraCubeFace, FiguraData, FiguraGroup, FiguraItemDisplayContext, FiguraItemDisplayTransform, FiguraKeyframeHolder, FiguraKeyframeInterpolation, FiguraMesh, FiguraMeshFace, FiguraMeshVertex, FiguraMeshVertexInfo, FiguraTexture, FiguraVec2, FiguraVec3, FiguraVectorKeyframe, Tuple } from "./figura_data";
 
 // Compile the global data in the project into a FiguraData.
 // Can throw a string error for display.
@@ -13,9 +14,22 @@ export function compile_figura_data(): FiguraData {
 	}
 
 	// Generate groups!
-	let roots = Project!.outliner
-		.filter(part => part instanceof Group)
-		.map(group => compile_group(group, [0,0,0]));
+	let roots = associate(
+		Project!.outliner.filter(part => part instanceof Group), 
+		group => [group.name, compile_group(group, [0,0,0])]
+	);
+
+	// Textures
+	let textures: Record<string, FiguraTexture> = associate(Texture.all, tex => [tex.name, {
+		path: tex.path,
+		uv_size: [tex.uv_width, tex.uv_height],
+		vanilla_texture_override: tex.vanilla_texture_override,
+		png_bytes_base64: tex.getBase64()
+	}]);
+
+	// Animations
+	let animations: { [name: string]: FiguraAnim } = {} 
+	AnimationItem.all.forEach(anim => animations[anim.name] = compile_animation(anim))
 
 	// Fetch item display data
 	let display_contexts: FiguraItemDisplayContext[] = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
@@ -34,13 +48,8 @@ export function compile_figura_data(): FiguraData {
 	// Return.
 	return {
 		roots,
-		textures: Texture.all.map(tex => ({
-			name: tex.name,
-			path: tex.path,
-			uv_size: [tex.uv_width, tex.uv_height],
-			vanilla_texture_override: tex.vanilla_texture_override,
-			png_bytes_base64: tex.getBase64()
-		})),
+		textures,
+		animations,
 		item_display_data
 	}
 }
@@ -59,9 +68,10 @@ function compile_group(group: Group, absolute_parent_origin: ArrayVector3): Figu
 	// Traverse sub-elements...
 	let absolute_origin = group.origin;
 
-	let children_groups = group.children
-		.filter(node => node instanceof Group)
-		.map(group => compile_group(group, absolute_origin));
+	let children_groups = associate(
+		group.children.filter(node => node instanceof Group),
+		group => [group.name, compile_group(group, absolute_origin)]
+	);
 
 	// Cubes and meshes require there to be a texture applied
 	if (!texture && group.children.some(node => node instanceof Cube || node instanceof Mesh)) {
@@ -77,7 +87,6 @@ function compile_group(group: Group, absolute_parent_origin: ArrayVector3): Figu
 		.map(mesh => compile_mesh(mesh, absolute_origin));
 
 	return {
-		name: group.name,
 		origin: absolute_origin.slice().V3_subtract(absolute_parent_origin),
 		rotation: group.rotation,
 		children: children_groups,
@@ -145,4 +154,70 @@ function compile_mesh(mesh: Mesh, absolute_parent_origin: FiguraVec3): FiguraMes
 			};
 		})
 	}
+}
+
+function compile_animation(anim: _Animation): FiguraAnim {
+
+	let parts: { [path: string]: FiguraKeyframeHolder } = {}
+	for (let uuid in anim.animators) {
+		let animator = anim.animators[uuid]
+		if (animator.keyframes && animator.keyframes.length && animator instanceof BoneAnimator) {
+			// Compute group path
+			var group: Group = animator.getGroup()
+			var path = group.name
+			while (group.parent && group.parent !== 'root') {
+				group = group.parent
+				path = group.name + "/" + path
+			}
+			// Compile keyframes
+			let keyframeHolder: FiguraKeyframeHolder = {
+				origin: animator.position?.flatMap(kf => compile_vec3_keyframe(kf, anim.snapping)),
+				rotation: animator.rotation?.flatMap(kf => compile_vec3_keyframe(kf, anim.snapping)),
+				scale: animator.scale?.flatMap(kf => compile_vec3_keyframe(kf, anim.snapping))
+			}
+			// Store
+			parts[path] = keyframeHolder
+		}
+	}
+
+	return {
+		length: anim.length,
+		snapping: anim.snapping,
+		parts,
+		script_keyframes: [] // TODO
+	}
+}
+
+// Because blockbench keyframes have a "pre" and a "post", one BB keyframe
+// can compile into multiple figura keyframes.
+function compile_vec3_keyframe(keyframe: _Keyframe, snapping: number | undefined): FiguraVectorKeyframe[] {
+
+	// Time
+	let time = snapping ? Math.round(keyframe.time * snapping) : keyframe.time
+
+	// Interpolation
+	let bbinterp = keyframe.interpolation
+	let interpolation: FiguraKeyframeInterpolation;
+	switch (bbinterp) {
+		case 'linear':
+		case 'catmullrom':
+		case 'step':
+			interpolation = bbinterp
+			break
+		case 'bezier':
+			interpolation = {
+				kind: 'bezier',
+				left_time: keyframe.bezier_left_time,
+				left_value: keyframe.bezier_left_value,
+				right_time: keyframe.bezier_right_time,
+				right_value: keyframe.bezier_right_value
+			}
+	}
+
+	// Multiple data points (pre/post) turn into multiple keyframes in our format.
+	return keyframe.data_points.map(datapoint => ({
+		time,
+		data: [datapoint.x, datapoint.y, datapoint.z],
+		interpolation
+	}))
 }

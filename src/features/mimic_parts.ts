@@ -82,11 +82,18 @@ function expand_model_parts(action_prefix: string, parts: MODELPART[], model_nam
 				click() { oneGroup(group => group.mimic_part = model_name + '/' + part); }
 			}));
 		} else {
-			return deleteLater(new Action(action_prefix + '.' + part[0], {
+			const action = deleteLater(new Action(action_prefix + '.' + part[0], {
 				name: part[0],
 				children: expand_model_parts(action_prefix + '.' + part[0], part[1], model_name),
-				click() {}
+				click() { oneGroup(group => group.mimic_part = model_name + '/' + part[0]); }
 			}));
+			// Manually add event listener, since it normally doesn't work on actions with children
+			action.menu_node.addEventListener('click', event => {
+				if (event.target !== action.menu_node) return;
+				action.trigger(event);
+				open_menu?.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
+			});
+			return action;
 		}
 	});
 }
