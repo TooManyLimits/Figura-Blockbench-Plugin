@@ -56,77 +56,58 @@ function oneGroup<T>(func: (group: Group) => T): T | undefined {
 }
 
 
-type ENTITIES = [string, MODELS][]; // Map entity type -> list of models
-type MODELS = [string, MODELPART[]][]; // Map model name -> children of the root
+type ENTITIES = [string, MODELPART[]][]; // Map entity type -> list of parts
 type MODELPART = string | [string, MODELPART[]]; // Tree of model parts with names and possibly children
 
 function expand_entities(entities: ENTITIES): any[] {
 	return entities.map(entity => deleteLater(new Action('figura.mimic_part_selector.' + entity[0], {
 		name: entity[0],
-		children: expand_models('figura.mimic_part_selector.' + entity[0], entity[1]),
+		children: expand_model_parts('figura.mimic_part_selector.' + entity[0], entity[1]),
 		click() {}
 	})));
 }
-function expand_models(action_prefix: string, models: MODELS): any[] {
-	return models.map(model => deleteLater(new Action(action_prefix + '.' + model[0], {
-		name: model[0],
-		children: expand_model_parts(action_prefix + '.' + model[0], model[1], model[0]),
-		click() {}
-	})));
-}
-function expand_model_parts(action_prefix: string, parts: MODELPART[], model_name: string): any[] {
+// Underscore means it's not clickable and is just a subfolder for organization
+function expand_model_parts(action_prefix: string, parts: MODELPART[]): any[] {
 	return parts.map(part => {
 		if (typeof part === 'string') {
 			return deleteLater(new Action(action_prefix + '.' + part, {
 				name: part,
-				click() { oneGroup(group => group.mimic_part = model_name + '/' + part); }
+				click() { oneGroup(group => group.mimic_part = part); }
 			}));
 		} else {
 			const action = deleteLater(new Action(action_prefix + '.' + part[0], {
-				name: part[0],
-				children: expand_model_parts(action_prefix + '.' + part[0], part[1], model_name),
-				click() { oneGroup(group => group.mimic_part = model_name + '/' + part[0]); }
+				name: part[0].startsWith('_') ? part[0].substring(1) : part[0], // Strip underscore
+				children: expand_model_parts(action_prefix + '.' + part[0], part[1]),
+				click: part[0].startsWith('_') ? () => {} : () => { oneGroup(group => group.mimic_part = part[0]); }
 			}));
 			// Manually add event listener, since it normally doesn't work on actions with children
-			action.menu_node.addEventListener('click', event => {
-				if (event.target !== action.menu_node) return;
-				action.trigger(event);
-				open_menu?.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
-			});
+			if (!part[0].startsWith('_')) {
+					action.menu_node.addEventListener('click', event => {
+					if (event.target !== action.menu_node) return;
+					action.trigger(event);
+					open_menu?.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
+				});
+			}
 			return action;
 		}
 	});
 }
 
-const SUPPORTED_MIMICS: ENTITIES = [
-	['Player', [
-		['ENTITY', [
-			['head', ['hat']],
-			['body', ['jacket']],
-			['left_arm', ['left_sleeve']],
-			['right_arm', ['right_sleeve']],
-			['left_leg', ['left_pants']],
-			['right_leg', ['right_pants']],
-		]],
-		['ELYTRA', [
-			'left_wing',
-			'right_wing'
-		]],
-		['CAPE_ROOT', [
-			['body', ['cape']]
-		]]
+
+const PLAYER: MODELPART[] = [
+	['head', ['hat']],
+	['body', ['jacket', 'cape']],
+	['left_arm', ['left_sleeve']],
+	['right_arm', ['right_sleeve']],
+	['left_leg', ['left_pants']],
+	['right_leg', ['right_pants']],
+	['_ELYTRA', [
+		'left_wing',
+		'right_wing'
 	]],
-	['Fox', [
-		['ENTITY', [
-			['head', [
-				'left_ear', 'right_ear',
-				'nose'
-			]],
-			['body', ['tail']],
-			'left_front_leg',
-			'right_front_leg',
-			'left_hind_leg',
-			'right_hind_leg',
-		]]
-	]]
 ];
+
+const SUPPORTED_MIMICS: ENTITIES = [
+	['Player', PLAYER],
+];
+

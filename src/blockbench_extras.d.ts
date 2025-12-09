@@ -7,7 +7,7 @@ interface Group {
 }
 interface GroupOptions {
 	mimic_part?: string,
-	texture?: string,
+	texture?: UUID,
 }
 
 // Add our own properties to Texture class (and options)
@@ -19,6 +19,7 @@ interface TextureData {
 }
 
 // These aren't in the types, so add them ourselves.
+
 interface Mesh {
 	origin: ArrayVector3,
 	rotation: ArrayVector3,
@@ -30,10 +31,13 @@ interface Cube {
 	box_uv?: boolean,
 }
 interface ModelProject {
-	display_settings: {[key: string]: DisplaySlot}
+	// display_settings: {[key: string]: DisplaySlot},
+	materials: (import("./features/materials").FiguraEditorMaterial)[],
 }
 interface OutlinerNode {
-	needsUniqueName: ConditionResolvable
+	needsUniqueName: ConditionResolvable,
+	preview_controller?: NodePreviewController,
+	type?: string
 }
 interface Action {
 	menu_node: HTMLElement
@@ -51,3 +55,24 @@ interface NullObjectAnimator {
 declare var open_menu: Menu | null
 declare var flipNameOnAxis: (node: OutlinerNode, axis: number, check?: (node: OutlinerNode) => boolean, original_name?: string) => void;
 declare var mirrorSelected: (axis: number) => void;
+declare var getFocusedTextInput: () => Element | undefined;
+declare const mouse_pos: {x: number, y: number};
+declare var isNodeUnderCursor: (node: Node, e: MouseEvent) => boolean;
+declare var findNodeUnderCursor: (selector: any, e: MouseEvent) => any;
+
+interface Array<T> {
+	findInArray(key: string, value: any): T | false
+}
+
+namespace Interface {
+	declare function definePanels(definer: () => void): void
+}
+namespace Blockbench {
+	declare var isTouch: boolean
+}
+namespace Menu {
+	declare var open: Menu | null | undefined
+}
+namespace Canvas {
+	declare function raycast(event: MouseEvent): false | RaycastResult
+}

@@ -1,6 +1,15 @@
 /******/ (() => { // webpackBootstrap
-/******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
+
+/***/ "./figura.js":
+/*!*******************!*\
+  !*** ./figura.js ***!
+  \*******************/
+/***/ (() => {
+
+
+
+/***/ }),
 
 /***/ "./src/compile.ts":
 /*!************************!*\
@@ -8,6 +17,7 @@
   \************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   compile_figura_data: () => (/* binding */ compile_figura_data)
@@ -37,18 +47,11 @@ function compile_figura_data() {
     let animations = {};
     AnimationItem.all.forEach(anim => animations[anim.name] = compile_animation(anim));
     // Fetch item display data
-    let display_contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
-    let item_display_data = {};
-    for (var display_context of display_contexts) {
-        let settings = Project === null || Project === void 0 ? void 0 : Project.display_settings[display_context];
-        if (settings) {
-            item_display_data[display_context] = {
-                translation: settings.translation,
-                rotation: settings.rotation,
-                scale: settings.scale
-            };
-        }
-    }
+    let item_display_data = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.mapValues)(Project.display_settings, (_, settings) => ({
+        translation: settings.translation,
+        rotation: settings.rotation,
+        scale: settings.scale
+    }));
     // Return.
     return {
         roots,
@@ -85,7 +88,7 @@ function compile_group(group, absolute_parent_origin) {
         rotation: group.rotation,
         children: children_groups,
         mimic_part: group.mimic_part || undefined,
-        texture_index: texture_index,
+        texture_index,
         cubes: cubes,
         meshes: meshes,
     };
@@ -99,7 +102,7 @@ function compile_cube(cube, absolute_parent_origin) {
         inflate: [cube.inflate, cube.inflate, cube.inflate],
         // Order of faces is important! See definition of FiguraCube
         faces: ['west', 'east', 'down', 'up', 'north', 'south']
-            .map(s => cube.faces[s] ? compile_cube_face(cube.faces[s], cube) : null)
+            .map(s => cube.faces[s] && cube.faces[s].texture !== null ? compile_cube_face(cube.faces[s], cube) : null)
     };
 }
 function compile_cube_face(face, cube) {
@@ -216,6 +219,7 @@ function compile_vec3_keyframe(keyframe, snapping) {
   \*************************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   setup_mimic_parts: () => (/* binding */ setup_mimic_parts)
@@ -275,73 +279,52 @@ function oneGroup(func) {
 function expand_entities(entities) {
     return entities.map(entity => (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action('figura.mimic_part_selector.' + entity[0], {
         name: entity[0],
-        children: expand_models('figura.mimic_part_selector.' + entity[0], entity[1]),
+        children: expand_model_parts('figura.mimic_part_selector.' + entity[0], entity[1]),
         click() { }
     })));
 }
-function expand_models(action_prefix, models) {
-    return models.map(model => (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + model[0], {
-        name: model[0],
-        children: expand_model_parts(action_prefix + '.' + model[0], model[1], model[0]),
-        click() { }
-    })));
-}
-function expand_model_parts(action_prefix, parts, model_name) {
+// Underscore means it's not clickable and is just a subfolder for organization
+function expand_model_parts(action_prefix, parts) {
     return parts.map(part => {
         if (typeof part === 'string') {
             return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + part, {
                 name: part,
-                click() { oneGroup(group => group.mimic_part = model_name + '/' + part); }
+                click() { oneGroup(group => group.mimic_part = part); }
             }));
         }
         else {
             const action = (0,_figura__WEBPACK_IMPORTED_MODULE_0__.deleteLater)(new Action(action_prefix + '.' + part[0], {
-                name: part[0],
-                children: expand_model_parts(action_prefix + '.' + part[0], part[1], model_name),
-                click() { oneGroup(group => group.mimic_part = model_name + '/' + part[0]); }
+                name: part[0].startsWith('_') ? part[0].substring(1) : part[0], // Strip underscore
+                children: expand_model_parts(action_prefix + '.' + part[0], part[1]),
+                click: part[0].startsWith('_') ? () => { } : () => { oneGroup(group => group.mimic_part = part[0]); }
             }));
             // Manually add event listener, since it normally doesn't work on actions with children
-            action.menu_node.addEventListener('click', event => {
-                if (event.target !== action.menu_node)
-                    return;
-                action.trigger(event);
-                open_menu === null || open_menu === void 0 ? void 0 : open_menu.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
-            });
+            if (!part[0].startsWith('_')) {
+                action.menu_node.addEventListener('click', event => {
+                    if (event.target !== action.menu_node)
+                        return;
+                    action.trigger(event);
+                    open_menu === null || open_menu === void 0 ? void 0 : open_menu.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
+                });
+            }
             return action;
         }
     });
 }
-const SUPPORTED_MIMICS = [
-    ['Player', [
-            ['ENTITY', [
-                    ['head', ['hat']],
-                    ['body', ['jacket']],
-                    ['left_arm', ['left_sleeve']],
-                    ['right_arm', ['right_sleeve']],
-                    ['left_leg', ['left_pants']],
-                    ['right_leg', ['right_pants']],
-                ]],
-            ['ELYTRA', [
-                    'left_wing',
-                    'right_wing'
-                ]],
-            ['CAPE_ROOT', [
-                    ['body', ['cape']]
-                ]]
+const PLAYER = [
+    ['head', ['hat']],
+    ['body', ['jacket', 'cape']],
+    ['left_arm', ['left_sleeve']],
+    ['right_arm', ['right_sleeve']],
+    ['left_leg', ['left_pants']],
+    ['right_leg', ['right_pants']],
+    ['_ELYTRA', [
+            'left_wing',
+            'right_wing'
         ]],
-    ['Fox', [
-            ['ENTITY', [
-                    ['head', [
-                            'left_ear', 'right_ear',
-                            'nose'
-                        ]],
-                    ['body', ['tail']],
-                    'left_front_leg',
-                    'right_front_leg',
-                    'left_hind_leg',
-                    'right_hind_leg',
-                ]]
-        ]]
+];
+const SUPPORTED_MIMICS = [
+    ['Player', PLAYER],
 ];
 
 
@@ -353,6 +336,7 @@ const SUPPORTED_MIMICS = [
   \**************************************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   setup_vanilla_texture_override: () => (/* binding */ setup_vanilla_texture_override)
@@ -384,6 +368,7 @@ function setup_vanilla_texture_override() {
   \***********************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   FILE_EXTENSION: () => (/* binding */ FILE_EXTENSION),
@@ -488,6 +473,7 @@ BBPlugin.register(PLUGIN_ID, {
   \**********************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   isFiguraAnim: () => (/* binding */ isFiguraAnim),
@@ -495,7 +481,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   isFiguraCubeFace: () => (/* binding */ isFiguraCubeFace),
 /* harmony export */   isFiguraData: () => (/* binding */ isFiguraData),
 /* harmony export */   isFiguraGroup: () => (/* binding */ isFiguraGroup),
-/* harmony export */   isFiguraItemDisplayContext: () => (/* binding */ isFiguraItemDisplayContext),
 /* harmony export */   isFiguraItemDisplayData: () => (/* binding */ isFiguraItemDisplayData),
 /* harmony export */   isFiguraItemDisplayTransform: () => (/* binding */ isFiguraItemDisplayTransform),
 /* harmony export */   isFiguraKeyframeHolder: () => (/* binding */ isFiguraKeyframeHolder),
@@ -667,36 +652,9 @@ function isFiguraItemDisplayData(obj) {
     return ((typedObj !== null &&
         typeof typedObj === "object" ||
         typeof typedObj === "function") &&
-        (typeof typedObj["none"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["none"])) &&
-        (typeof typedObj["thirdperson_lefthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["thirdperson_lefthand"])) &&
-        (typeof typedObj["thirdperson_righthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["thirdperson_righthand"])) &&
-        (typeof typedObj["firstperson_lefthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["firstperson_lefthand"])) &&
-        (typeof typedObj["firstperson_righthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["firstperson_righthand"])) &&
-        (typeof typedObj["head"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["head"])) &&
-        (typeof typedObj["gui"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["gui"])) &&
-        (typeof typedObj["ground"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["ground"])) &&
-        (typeof typedObj["fixed"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["fixed"])));
-}
-function isFiguraItemDisplayContext(obj) {
-    const typedObj = obj;
-    return ((typedObj === "none" ||
-        typedObj === "thirdperson_lefthand" ||
-        typedObj === "thirdperson_righthand" ||
-        typedObj === "firstperson_lefthand" ||
-        typedObj === "firstperson_righthand" ||
-        typedObj === "head" ||
-        typedObj === "gui" ||
-        typedObj === "ground" ||
-        typedObj === "fixed"));
+        Object.entries(typedObj)
+            .every(([key, value]) => (isFiguraItemDisplayTransform(value) &&
+            typeof key === "string")));
 }
 function isFiguraItemDisplayTransform(obj) {
     const typedObj = obj;
@@ -718,16 +676,19 @@ function isFiguraAnim(obj) {
         typeof typedObj["length"] === "number" &&
         (typeof typedObj["snapping"] === "undefined" ||
             typeof typedObj["snapping"] === "number") &&
+        (typeof typedObj["strength"] === "undefined" ||
+            typeof typedObj["strength"] === "number") &&
         (typeof typedObj["loop"] === "undefined" ||
             typedObj["loop"] === "once" ||
             typedObj["loop"] === "hold" ||
             typedObj["loop"] === "loop") &&
-        (typedObj["parts"] !== null &&
-            typeof typedObj["parts"] === "object" ||
-            typeof typedObj["parts"] === "function") &&
-        Object.entries(typedObj["parts"])
-            .every(([key, value]) => (isFiguraKeyframeHolder(value) &&
-            typeof key === "string")) &&
+        (typeof typedObj["parts"] === "undefined" ||
+            (typedObj["parts"] !== null &&
+                typeof typedObj["parts"] === "object" ||
+                typeof typedObj["parts"] === "function") &&
+                Object.entries(typedObj["parts"])
+                    .every(([key, value]) => (isFiguraKeyframeHolder(value) &&
+                    typeof key === "string"))) &&
         (typeof typedObj["script_keyframes"] === "undefined" ||
             Array.isArray(typedObj["script_keyframes"]) &&
                 typedObj["script_keyframes"].every((e) => isFiguraScriptKeyframe(e))));
@@ -807,6 +768,7 @@ function isFiguraVec3(obj) {
   \***********************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   create_format: () => (/* binding */ create_format)
@@ -950,6 +912,7 @@ function create_format() {
   \**********************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
+"use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   parse_figura_data: () => (/* binding */ parse_figura_data)
@@ -964,7 +927,6 @@ function parse_figura_data(data) {
     // Ensure data is a valid figmodel
     if (!(0,_figura_data_guard__WEBPACK_IMPORTED_MODULE_1__.isFiguraData)(data))
         err('Invalid figmodel. Likely a bug with exporter! Please send your figmodel file to the Figura dev team so we can check it out!');
-    const figmodel = data;
     // Process fields
     (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_a = data.textures) !== null && _a !== void 0 ? _a : {}, parseTexture);
     (0,_figura__WEBPACK_IMPORTED_MODULE_0__.forEachEntry)((_b = data.roots) !== null && _b !== void 0 ? _b : {}, (name, group) => parseGroup(name, group, Project.textures, undefined));
@@ -974,7 +936,6 @@ function parse_figura_data(data) {
         Project.display_settings = parseItemDisplayData(data.item_display_data);
 }
 function parseTexture(name, figuraTexture) {
-    // Check and fetch fields
     let dataUrl = 'data:image/png;base64,' + figuraTexture.png_bytes_base64;
     let tex = new Texture({
         name,
@@ -1037,13 +998,20 @@ function parseCube(figuraCube, parent) {
     // Fetch faces
     let bb_faces = {};
     ['west', 'east', 'down', 'up', 'north', 'south'].forEach((dir, i) => {
-        if (figuraCube.faces[i] === null)
-            return;
-        let face = figuraCube.faces[i];
-        bb_faces[dir] = {
-            uv: [face.uv_min[0], face.uv_min[1], face.uv_max[0], face.uv_max[1]],
-            rotation: face.rotation,
-        };
+        if (figuraCube.faces[i] === null) {
+            bb_faces[dir] = {
+                uv: [0, 0, 0, 0],
+                texture: null,
+                rotation: 0
+            };
+        }
+        else {
+            let face = figuraCube.faces[i];
+            bb_faces[dir] = {
+                uv: [face.uv_min[0], face.uv_min[1], face.uv_max[0], face.uv_max[1]],
+                rotation: face.rotation,
+            };
+        }
     });
     // Create and setup cube
     let cube = new Cube({
@@ -1094,21 +1062,16 @@ function parseMesh(figuraMesh, parent) {
     mesh.addFaces(...bb_faces);
     return mesh;
 }
-const contexts = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
 function parseItemDisplayData(data) {
-    var _a, _b, _c;
-    let result = {};
-    for (let context of contexts) {
-        if (data[context]) {
-            result[context] = new DisplaySlot(context, {
-                translation: (_a = data[context].translation) !== null && _a !== void 0 ? _a : [0, 0, 0],
-                rotation: (_b = data[context].rotation) !== null && _b !== void 0 ? _b : [0, 0, 0],
-                scale: (_c = data[context].scale) !== null && _c !== void 0 ? _c : [1, 1, 1],
-                mirror: [false, false, false]
-            });
-        }
-    }
-    return result;
+    return (0,_figura__WEBPACK_IMPORTED_MODULE_0__.mapValues)(data, (context, transform) => {
+        var _a, _b, _c;
+        return new DisplaySlot(context, {
+            translation: (_a = transform.translation) !== null && _a !== void 0 ? _a : [0, 0, 0],
+            rotation: (_b = transform.rotation) !== null && _b !== void 0 ? _b : [0, 0, 0],
+            scale: (_c = transform.scale) !== null && _c !== void 0 ? _c : [1, 1, 1],
+            mirror: [false, false, false]
+        });
+    });
 }
 // Parse and add an animation from the given data
 function parseAnimation(name, figuraAnim) {
@@ -1254,7 +1217,8 @@ function err(message) {
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__("./src/figura.ts");
+/******/ 	__webpack_require__("./src/figura.ts");
+/******/ 	var __webpack_exports__ = __webpack_require__("./figura.js");
 /******/ 	
 /******/ })()
 ;

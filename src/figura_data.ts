@@ -9,8 +9,8 @@
 /** @see {isFiguraData} ts-auto-guard:type-guard */
 export type FiguraData = {
 	roots?: Record<string, FiguraGroup>,
-	textures?: Record<string, FiguraTexture>, // Textures in the model, by name
-	animations?: Record<string, FiguraAnim>, // Animations in the model, by name
+	textures?: Record<string, FiguraTexture>, // Textures in the model, by name (Ordered)
+	animations?: Record<string, FiguraAnim>, // Animations in the model, by name (Ordered)
 	item_display_data?: FiguraItemDisplayData, // Only used in item models
 }
 
@@ -81,9 +81,7 @@ export type FiguraTexture = {
 
 // Item display data.
 /** @see {isFiguraItemDisplayData} ts-auto-guard:type-guard */
-export type FiguraItemDisplayData = { [key in FiguraItemDisplayContext]?: FiguraItemDisplayTransform }
-/** @see {isFiguraItemDisplayContext} ts-auto-guard:type-guard */
-export type FiguraItemDisplayContext = 'none' | 'thirdperson_lefthand' | 'thirdperson_righthand' | 'firstperson_lefthand' | 'firstperson_righthand' | 'head' | 'gui' | 'ground' | 'fixed'
+export type FiguraItemDisplayData = Record<string, FiguraItemDisplayTransform>
 /** @see {isFiguraItemDisplayTransform} ts-auto-guard:type-guard */
 export type FiguraItemDisplayTransform = {
 	translation?: FiguraVec3, // Default 0,0,0

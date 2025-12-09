@@ -1,5 +1,5 @@
-import { associate } from "./figura";
-import { FiguraAnim, FiguraCube, FiguraCubeFace, FiguraData, FiguraGroup, FiguraItemDisplayContext, FiguraItemDisplayTransform, FiguraKeyframeHolder, FiguraKeyframeInterpolation, FiguraMesh, FiguraMeshFace, FiguraMeshVertex, FiguraMeshVertexInfo, FiguraTexture, FiguraVec2, FiguraVec3, FiguraVectorKeyframe, Tuple } from "./figura_data";
+import { associate, mapValues } from "./figura";
+import { FiguraAnim, FiguraCube, FiguraCubeFace, FiguraData, FiguraGroup, FiguraItemDisplayTransform, FiguraKeyframeHolder, FiguraKeyframeInterpolation, FiguraMesh, FiguraMeshFace, FiguraMeshVertex, FiguraMeshVertexInfo, FiguraTexture, FiguraVec2, FiguraVec3, FiguraVectorKeyframe, Tuple } from "./figura_data";
 
 // Compile the global data in the project into a FiguraData.
 // Can throw a string error for display.
@@ -32,18 +32,11 @@ export function compile_figura_data(): FiguraData {
 	AnimationItem.all.forEach(anim => animations[anim.name] = compile_animation(anim))
 
 	// Fetch item display data
-	let display_contexts: FiguraItemDisplayContext[] = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
-	let item_display_data: {[context in FiguraItemDisplayContext]?: FiguraItemDisplayTransform} = {}
-	for (var display_context of display_contexts) {
-		let settings = Project?.display_settings[display_context];
-		if (settings) {
-			item_display_data[display_context] = {
-				translation: settings.translation,
-				rotation: settings.rotation,
-				scale: settings.scale
-			};
-		}
-	}
+	let item_display_data = mapValues(Project!.display_settings, (_, settings) => ({
+		translation: settings.translation,
+		rotation: settings.rotation,
+		scale: settings.scale
+	}));
 
 	// Return.
 	return {
@@ -91,7 +84,7 @@ function compile_group(group: Group, absolute_parent_origin: ArrayVector3): Figu
 		rotation: group.rotation,
 		children: children_groups,
 		mimic_part: group.mimic_part || undefined,
-		texture_index: texture_index,
+		texture_index,
 		cubes: cubes,
 		meshes: meshes,
 	}
@@ -106,7 +99,7 @@ function compile_cube(cube: Cube, absolute_parent_origin: FiguraVec3): FiguraCub
 		inflate: [cube.inflate, cube.inflate, cube.inflate],
 		// Order of faces is important! See definition of FiguraCube
 		faces: ['west', 'east', 'down', 'up', 'north', 'south']
-			.map(s => cube.faces[s] ? compile_cube_face(cube.faces[s], cube) : null) as any
+			.map(s => cube.faces[s] && cube.faces[s].texture !== null ? compile_cube_face(cube.faces[s], cube) : null) as any
 	}
 }
 function compile_cube_face(face: CubeFace, cube: Cube): FiguraCubeFace {

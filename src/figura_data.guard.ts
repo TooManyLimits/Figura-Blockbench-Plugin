@@ -2,7 +2,7 @@
  * Generated type guards for "figura_data.ts".
  * WARNING: Do not manually change this file.
  */
-import { FiguraData, FiguraGroup, FiguraCube, FiguraCubeFace, FiguraMesh, FiguraMeshVertex, FiguraMeshFace, FiguraMeshVertexInfo, FiguraTexture, FiguraItemDisplayData, FiguraItemDisplayContext, FiguraItemDisplayTransform, FiguraAnim, FiguraKeyframeHolder, FiguraScriptKeyframe, FiguraVectorKeyframe, FiguraKeyframeInterpolation, FiguraVec2, FiguraVec3 } from "./figura_data";
+import { FiguraData, FiguraGroup, FiguraCube, FiguraCubeFace, FiguraMesh, FiguraMeshVertex, FiguraMeshFace, FiguraMeshVertexInfo, FiguraTexture, FiguraItemDisplayData, FiguraItemDisplayTransform, FiguraAnim, FiguraKeyframeHolder, FiguraScriptKeyframe, FiguraVectorKeyframe, FiguraKeyframeInterpolation, FiguraVec2, FiguraVec3 } from "./figura_data";
 
 export function isFiguraData(obj: unknown): obj is FiguraData {
     const typedObj = obj as FiguraData
@@ -197,39 +197,9 @@ export function isFiguraItemDisplayData(obj: unknown): obj is FiguraItemDisplayD
         (typedObj !== null &&
             typeof typedObj === "object" ||
             typeof typedObj === "function") &&
-        (typeof typedObj["none"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["none"]) as boolean) &&
-        (typeof typedObj["thirdperson_lefthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["thirdperson_lefthand"]) as boolean) &&
-        (typeof typedObj["thirdperson_righthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["thirdperson_righthand"]) as boolean) &&
-        (typeof typedObj["firstperson_lefthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["firstperson_lefthand"]) as boolean) &&
-        (typeof typedObj["firstperson_righthand"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["firstperson_righthand"]) as boolean) &&
-        (typeof typedObj["head"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["head"]) as boolean) &&
-        (typeof typedObj["gui"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["gui"]) as boolean) &&
-        (typeof typedObj["ground"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["ground"]) as boolean) &&
-        (typeof typedObj["fixed"] === "undefined" ||
-            isFiguraItemDisplayTransform(typedObj["fixed"]) as boolean)
-    )
-}
-
-export function isFiguraItemDisplayContext(obj: unknown): obj is FiguraItemDisplayContext {
-    const typedObj = obj as FiguraItemDisplayContext
-    return (
-        (typedObj === "none" ||
-            typedObj === "thirdperson_lefthand" ||
-            typedObj === "thirdperson_righthand" ||
-            typedObj === "firstperson_lefthand" ||
-            typedObj === "firstperson_righthand" ||
-            typedObj === "head" ||
-            typedObj === "gui" ||
-            typedObj === "ground" ||
-            typedObj === "fixed")
+        Object.entries<any>(typedObj)
+            .every(([key, value]) => (isFiguraItemDisplayTransform(value) as boolean &&
+                typeof key === "string"))
     )
 }
 
@@ -257,16 +227,19 @@ export function isFiguraAnim(obj: unknown): obj is FiguraAnim {
         typeof typedObj["length"] === "number" &&
         (typeof typedObj["snapping"] === "undefined" ||
             typeof typedObj["snapping"] === "number") &&
+        (typeof typedObj["strength"] === "undefined" ||
+            typeof typedObj["strength"] === "number") &&
         (typeof typedObj["loop"] === "undefined" ||
             typedObj["loop"] === "once" ||
             typedObj["loop"] === "hold" ||
             typedObj["loop"] === "loop") &&
-        (typedObj["parts"] !== null &&
-            typeof typedObj["parts"] === "object" ||
-            typeof typedObj["parts"] === "function") &&
-        Object.entries<any>(typedObj["parts"])
-            .every(([key, value]) => (isFiguraKeyframeHolder(value) as boolean &&
-                typeof key === "string")) &&
+        (typeof typedObj["parts"] === "undefined" ||
+            (typedObj["parts"] !== null &&
+                typeof typedObj["parts"] === "object" ||
+                typeof typedObj["parts"] === "function") &&
+            Object.entries<any>(typedObj["parts"])
+                .every(([key, value]) => (isFiguraKeyframeHolder(value) as boolean &&
+                    typeof key === "string"))) &&
         (typeof typedObj["script_keyframes"] === "undefined" ||
             Array.isArray(typedObj["script_keyframes"]) &&
             typedObj["script_keyframes"].every((e: any) =>

@@ -1,5 +1,5 @@
-import { forEachEntry, groupAdjacent } from "./figura";
-import { FiguraAnim, FiguraCube, FiguraData, FiguraGroup, FiguraItemDisplayContext, FiguraItemDisplayData, FiguraKeyframeHolder, FiguraMesh, FiguraTexture, FiguraVectorKeyframe } from "./figura_data";
+import { forEachEntry, groupAdjacent, mapValues } from "./figura";
+import { FiguraAnim, FiguraCube, FiguraData, FiguraGroup, FiguraItemDisplayData, FiguraKeyframeHolder, FiguraMesh, FiguraTexture, FiguraVectorKeyframe } from "./figura_data";
 import { isFiguraData } from "./figura_data.guard";
 
 // Import the given figmodel into the project
@@ -7,7 +7,6 @@ export function parse_figura_data(data: any) {
 	// Ensure data is a valid figmodel
 	if (!isFiguraData(data))
 		err('Invalid figmodel. Likely a bug with exporter! Please send your figmodel file to the Figura dev team so we can check it out!');
-	const figmodel = data as FiguraData;
 
 	// Process fields
 	forEachEntry(data.textures ?? {}, parseTexture);
@@ -19,8 +18,6 @@ export function parse_figura_data(data: any) {
 }
 
 function parseTexture(name: string, figuraTexture: FiguraTexture) {
-	// Check and fetch fields
-
 	let dataUrl = 'data:image/png;base64,' + figuraTexture.png_bytes_base64;
 	let tex = new Texture({
 		name,
@@ -91,11 +88,18 @@ function parseCube(figuraCube: FiguraCube, parent: Group): Cube {
 	// Fetch faces
 	let bb_faces: {[dir: string]: CubeFaceOptions} = {};
 	['west', 'east', 'down', 'up', 'north', 'south'].forEach((dir, i) => {
-		if (figuraCube.faces[i] === null) return;
-		let face = figuraCube.faces[i];
-		bb_faces[dir] = {
-			uv: [face.uv_min[0], face.uv_min[1], face.uv_max[0], face.uv_max[1]],
-			rotation: face.rotation,
+		if (figuraCube.faces[i] === null) {
+			bb_faces[dir] = {
+				uv: [0,0,0,0],
+				texture: null as any,
+				rotation: 0
+			}
+		} else {
+			let face = figuraCube.faces[i];
+			bb_faces[dir] = {
+				uv: [face.uv_min[0], face.uv_min[1], face.uv_max[0], face.uv_max[1]],
+				rotation: face.rotation,
+			}
 		}
 	})
 
@@ -156,20 +160,13 @@ function parseMesh(figuraMesh: FiguraMesh, parent: Group): Mesh {
 	return mesh;
 }
 
-const contexts: FiguraItemDisplayContext[] = ['none', 'thirdperson_lefthand', 'thirdperson_righthand', 'firstperson_lefthand', 'firstperson_righthand', 'head', 'gui', 'ground', 'fixed'];
 function parseItemDisplayData(data: FiguraItemDisplayData): {[key: string]: DisplaySlot} {
-	let result: {[key: string]: DisplaySlot} = {};
-	for (let context of contexts) {
-		if (data[context]) {
-			result[context] = new DisplaySlot(context, {
-				translation: data[context].translation ?? [0,0,0],
-				rotation: data[context].rotation ?? [0,0,0],
-				scale: data[context].scale ?? [1,1,1],
-				mirror: [false, false, false]
-			});
-		}
-	}
-	return result;
+	return mapValues(data, (context, transform) => new DisplaySlot(context, {
+		translation: transform.translation ?? [0,0,0],
+		rotation: transform.rotation ?? [0,0,0],
+		scale: transform.scale ?? [1,1,1],
+		mirror: [false, false, false]
+	}));
 }
 
 // Parse and add an animation from the given data
