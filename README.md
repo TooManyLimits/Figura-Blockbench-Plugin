@@ -1,6 +1,6 @@
 # THIS IS NOT MEANT TO BE USED FOR CURRENT FIGURA!
 
-This repository is for the IN-DEVELOPMENT Figura re-rewrite at [https://github.com/FiguraMC/Figura2].
+This repository is for the IN-DEVELOPMENT Figura re-rewrite at https://github.com/FiguraMC/figura-core (and related repos).
 
 It is NOT yet stable, and MAY CONTAIN BUGS.
 
