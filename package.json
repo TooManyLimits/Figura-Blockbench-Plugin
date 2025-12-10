@@ -2,7 +2,6 @@
 	"name": "figura_blockbench_plugin",
 	"version": "0.0.1",
 	"devDependencies": {
-		"blockbench-types": "git://github.com/SnaveSutit/blockbench-types.git#d8580757e7800925f32fcf651746b5d926474b56",
 		"ts-auto-guard": "^5.0.1",
 		"ts-loader": "9.5.2",
 		"typescript": "5.7.3",
@@ -11,5 +10,8 @@
 	},
 	"scripts": {
 		"build": "webpack"
+	},
+	"dependencies": {
+		"blockbench-types": "^5.0.0"
 	}
 }

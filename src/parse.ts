@@ -171,7 +171,8 @@ function parseItemDisplayData(data: FiguraItemDisplayData): {[key: string]: Disp
 
 // Parse and add an animation from the given data
 function parseAnimation(name: string, figuraAnim: FiguraAnim) {
-	const anim = new Blockbench.Animation({
+	// Reverted to depreciated _Animation
+	const anim = new (Blockbench as any).Animation({
 		name,
 		length: figuraAnim.length,
 		snapping: figuraAnim.snapping

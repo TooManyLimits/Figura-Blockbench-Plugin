@@ -67,9 +67,10 @@ interface Array<T> {
 namespace Interface {
 	declare function definePanels(definer: () => void): void
 }
-namespace Blockbench {
-	declare var isTouch: boolean
-}
+// Clashes with type.
+//namespace Blockbench {
+	//declare var isTouch: boolean
+//}
 namespace Menu {
 	declare var open: Menu | null | undefined
 }

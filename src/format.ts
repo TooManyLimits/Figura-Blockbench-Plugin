@@ -3,6 +3,8 @@ import { compile_figura_data } from './compile';
 import { deleteLater, FILE_EXTENSION, PLUGIN_ID } from './figura'
 import { parse_figura_data } from './parse';
 
+Codec
+
 // Create the Figura format instance.
 // This also saves it in the global variable Formats.
 export function create_format() {
@@ -66,7 +68,7 @@ export function create_format() {
 			},
 			parse(data, path, add) {
 				try {
-					if (add) throw 'Tried to parse figmodel with "add" param? Not sure what this is, please tell Figura devs about this!';
+					//if (add) throw 'Tried to parse figmodel with "add" param? Not sure what this is, please tell Figura devs about this!';
 					parse_figura_data(data);
 					Canvas.updateAll();
 					Validator.validate();
@@ -99,8 +101,8 @@ export function create_format() {
 						name: this.fileName(),
 						startpath: this.startPath(),
 						content: compiled,
-						custom_writer: isApp ? (a, b) => this.write(a, b) : undefined,
-					}, path => this.afterDownload(path))
+						custom_writer: isApp ? (a: any, b: string) => this.write(a, b) : undefined,
+					}, (path: string) => this.afterDownload(path))
 				} catch (error: any) {
 					Blockbench.showMessageBox({
 						title: 'Error during figmodel export!',

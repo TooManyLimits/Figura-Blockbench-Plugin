@@ -159,8 +159,8 @@ function compile_animation(anim: _Animation): FiguraAnim {
 			var group: Group = animator.getGroup()
 			var path = group.name
 			while (group.parent && group.parent !== 'root') {
-				group = group.parent
-				path = group.name + "/" + path
+				group = group.parent as Group;
+				path = group.name + "/" + path;
 			}
 			// Compile keyframes
 			let keyframeHolder: FiguraKeyframeHolder = {
