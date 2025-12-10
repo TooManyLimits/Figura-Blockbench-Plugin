@@ -304,6 +304,7 @@ function expand_model_parts(action_prefix, parts) {
                     if (event.target !== action.menu_node)
                         return;
                     action.trigger(event);
+                    open_interface === null || open_interface === void 0 ? void 0 : open_interface.hide();
                     open_menu === null || open_menu === void 0 ? void 0 : open_menu.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
                 });
             }
@@ -840,8 +841,6 @@ function create_format() {
             },
             parse(data, path, add) {
                 try {
-                    if (add)
-                        throw 'Tried to parse figmodel with "add" param? Not sure what this is, please tell Figura devs about this!';
                     (0,_parse__WEBPACK_IMPORTED_MODULE_2__.parse_figura_data)(data);
                     Canvas.updateAll();
                     Validator.validate();
@@ -877,7 +876,7 @@ function create_format() {
                         startpath: this.startPath(),
                         content: compiled,
                         custom_writer: isApp ? (a, b) => this.write(a, b) : undefined,
-                    }, path => this.afterDownload(path));
+                    }, (path) => this.afterDownload(path));
                 }
                 catch (error) {
                     Blockbench.showMessageBox({

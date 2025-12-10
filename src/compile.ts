@@ -156,7 +156,7 @@ function compile_animation(anim: _Animation): FiguraAnim {
 		let animator = anim.animators[uuid]
 		if (animator.keyframes && animator.keyframes.length && animator instanceof BoneAnimator) {
 			// Compute group path
-			var group: Group = animator.getGroup()
+			var group: OutlinerNode = animator.getGroup()
 			var path = group.name
 			while (group.parent && group.parent !== 'root') {
 				group = group.parent

@@ -36,7 +36,7 @@
 
 		/* Specify type package names to be included without being referenced in a source file. */
 		"types": [
-			"./node_modules/blockbench-types/types/blockbench.d.ts",
+			"./node_modules/blockbench-types/index.d.ts",
 			"./src/blockbench_extras.d.ts"
 		],
 		

@@ -66,7 +66,6 @@ export function create_format() {
 			},
 			parse(data, path, add) {
 				try {
-					if (add) throw 'Tried to parse figmodel with "add" param? Not sure what this is, please tell Figura devs about this!';
 					parse_figura_data(data);
 					Canvas.updateAll();
 					Validator.validate();
@@ -99,8 +98,8 @@ export function create_format() {
 						name: this.fileName(),
 						startpath: this.startPath(),
 						content: compiled,
-						custom_writer: isApp ? (a, b) => this.write(a, b) : undefined,
-					}, path => this.afterDownload(path))
+						custom_writer: isApp ? (a: string | ArrayBuffer | Blob, b: string) => this.write(a, b) : undefined,
+					}, (path: string) => this.afterDownload(path))
 				} catch (error: any) {
 					Blockbench.showMessageBox({
 						title: 'Error during figmodel export!',

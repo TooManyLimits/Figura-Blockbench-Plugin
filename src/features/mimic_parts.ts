@@ -85,6 +85,7 @@ function expand_model_parts(action_prefix: string, parts: MODELPART[]): any[] {
 					action.menu_node.addEventListener('click', event => {
 					if (event.target !== action.menu_node) return;
 					action.trigger(event);
+					open_interface?.hide();
 					open_menu?.hide(); // Hide the menu, since that also doesn't happen automatically when clicking action with children
 				});
 			}
