@@ -3,7 +3,6 @@ import { compile_figura_data } from './compile';
 import { deleteLater, FILE_EXTENSION, PLUGIN_ID } from './figura'
 import { parse_figura_data } from './parse';
 
-Codec
 
 // Create the Figura format instance.
 // This also saves it in the global variable Formats.
