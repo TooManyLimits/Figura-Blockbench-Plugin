@@ -1,3 +1,4 @@
+import "./style.css"
 import { create_format } from './format';
 import { setup_mimic_parts } from './features/mimic_parts';
 import { setup_vanilla_texture_override } from './features/vanilla_texture_override';
