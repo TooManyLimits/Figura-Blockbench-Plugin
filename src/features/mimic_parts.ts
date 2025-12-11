@@ -1,4 +1,5 @@
 import { deleteLater, PLUGIN_ID } from "../figura";
+import mimic_part_outliner_override from "./mimic_parts_outliner";
 
 // Set up mimic part functionality.
 export function setup_mimic_parts() {
@@ -44,6 +45,9 @@ export function setup_mimic_parts() {
 	// Add actions to group menu.
 	Group.prototype.menu?.structure.push(new MenuSeparator()); // Separator before figura stuff
 	Group.prototype.menu?.addAction(chooseMimicPart);
+
+	// Override the outliner
+	mimic_part_outliner_override();
 }
 
 // Helpers because multi_selected and first_selected and properties are annoying
